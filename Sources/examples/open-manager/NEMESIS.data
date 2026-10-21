@@ -1,0 +1,6 @@
+[nemesis]
+type=open
+id=open-manager
+name=Open NEMESIS Manager
+version=1
+compat=gen5w

@@ -1,0 +1,12 @@
+[nemesis]
+version=1.0
+id=usb-handler
+name=USB Handler
+types=service
+
+[service.0]
+name=usb-handler
+kind=sh
+path=svc/usb-handler.sh
+uid=root
+mode=restart

@@ -1,0 +1,21 @@
+[nemesis]
+version=1.0
+id=hello.tool
+name=Hello Tool
+types=application,service
+preinstall=scripts/pre.sh
+postinstall=scripts/post.sh
+preuninstall=scripts/preun.sh
+postuninstall=scripts/postun.sh
+
+[app.0]
+kind=sh
+path=bin/tool.sh
+uid=root
+
+[service.0]
+name=hello-daemon
+kind=sh
+path=svc/daemon.sh
+uid=root
+mode=background
