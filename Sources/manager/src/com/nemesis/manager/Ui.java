@@ -31,6 +31,8 @@ final class Ui {
     static void bindTitle(final Activity a, int titleRes) {
         TextView t = (TextView) a.findViewById(R.id.title_bar_text);
         if (t != null) t.setText(titleRes);
+        TextView ver = (TextView) a.findViewById(R.id.title_bar_version);
+        if (ver != null) ver.setText(versionName(a));
         View c = a.findViewById(R.id.btn_close);
         if (c != null) {
             if (c instanceof Button) ((Button) c).setText(R.string.close);
@@ -40,6 +42,16 @@ final class Ui {
                 }
             });
         }
+    }
+
+    static String versionName(Context c) {
+        try {
+            String name = c.getPackageManager()
+                    .getPackageInfo(c.getPackageName(), 0).versionName;
+            if (name != null && name.length() > 0) return name;
+        } catch (Throwable ignored) {
+        }
+        return "";
     }
 
     static void ensureWatchdog() {
@@ -82,6 +94,13 @@ final class Ui {
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(a, 60));
         title.setLayoutParams(tp);
+
+        TextView ver = new TextView(a);
+        ver.setId(R.id.title_bar_version);
+        ver.setTextColor(TITLE_FG);
+        ver.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        ver.setGravity(Gravity.CENTER_VERTICAL);
+        title.addView(ver, new LinearLayout.LayoutParams(dp(a, 72), dp(a, 60)));
 
         TextView tv = new TextView(a);
         tv.setId(R.id.title_bar_text);
@@ -166,7 +185,7 @@ final class Ui {
         root.setBackgroundColor(0xFF222628);
         root.setPadding(dp(a, 20), dp(a, 16), dp(a, 20), dp(a, 16));
         TextView title = new TextView(a);
-        title.setId(R.id.alertTitle);
+        title.setId(R.id.title_bar_text);
         title.setTextColor(TITLE_FG);
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23);
         TextView msg = new TextView(a);

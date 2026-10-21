@@ -1,5 +1,6 @@
 #include "nemesis.h"
 
+#include <strings.h>
 #include <zlib.h>
 
 static uint16_t u16(const unsigned char *p) {
@@ -50,31 +51,72 @@ static int write_all(const char *path, const void *data, size_t n, mode_t mode) 
     return 0;
 }
 
+/* Sizes live in the central directory. Bit 3 (data descriptor) leaves the
+ * local header sizes at zero; macOS zip sets that bit. */
+static int zip_find_eocd(FILE *f, uint32_t *cd_off, uint16_t *nument) {
+    unsigned char win[65557];
+    long sz, start, i;
+    size_t n;
+    if (fseek(f, 0, SEEK_END) != 0) return -1;
+    sz = ftell(f);
+    if (sz < 22) return -1;
+    start = sz > (long)sizeof(win) ? sz - (long)sizeof(win) : 0;
+    if (fseek(f, start, SEEK_SET) != 0) return -1;
+    n = fread(win, 1, sizeof(win), f);
+    if (n < 22) return -1;
+    for (i = (long)n - 22; i >= 0; i--) {
+        if (u32(win + i) != 0x06054b50) continue;
+        *nument = u16(win + i + 10);
+        *cd_off = u32(win + i + 16);
+        if (*cd_off == 0xffffffff) return -1;
+        return 0;
+    }
+    return -1;
+}
+
+static int zip_member_skip(const char *name) {
+    if (!strncmp(name, "__MACOSX/", 9) || strstr(name, "/__MACOSX/")) return 1;
+    if (!strcmp(name, ".DS_Store") || strstr(name, "/.DS_Store")) return 1;
+    return 0;
+}
+
 static int zip_iter(const char *zip,
                     int (*cb)(const char *name, const unsigned char *data, size_t n, void *ctx),
                     void *ctx) {
     FILE *f;
-    unsigned char hdr[30];
+    unsigned char hdr[46];
+    uint32_t cd_off;
+    uint16_t nument, i;
     f = fopen(zip, "rb");
     if (!f) return -1;
-    while (fread(hdr, 1, 30, f) == 30) {
-        uint32_t sig = u32(hdr);
-        uint16_t method, namelen, extralen, flags;
-        uint32_t csize, usize;
+    if (zip_find_eocd(f, &cd_off, &nument) != 0) {
+        fclose(f);
+        return -1;
+    }
+    if (fseek(f, (long)cd_off, SEEK_SET) != 0) {
+        fclose(f);
+        return -1;
+    }
+    for (i = 0; i < nument; i++) {
+        uint16_t method, namelen, extralen, commentlen, flags;
+        uint32_t csize, usize, local_off;
         char name[MAX_PATH];
-        unsigned char *cdata, *udata;
-        if (sig == 0x02014b50 || sig == 0x06054b50) break;
-        if (sig != 0x04034b50) {
+        unsigned char local[30];
+        unsigned char *cdata = NULL, *udata = NULL;
+        if (fread(hdr, 1, 46, f) != 46 || u32(hdr) != 0x02014b50) {
             fclose(f);
             return -1;
         }
-        flags = u16(hdr + 6);
-        method = u16(hdr + 8);
-        csize = u32(hdr + 18);
-        usize = u32(hdr + 22);
-        namelen = u16(hdr + 26);
-        extralen = u16(hdr + 28);
-        if (namelen >= sizeof(name) || (flags & 0x8)) {
+        flags = u16(hdr + 8);
+        method = u16(hdr + 10);
+        csize = u32(hdr + 20);
+        usize = u32(hdr + 24);
+        namelen = u16(hdr + 28);
+        extralen = u16(hdr + 30);
+        commentlen = u16(hdr + 32);
+        local_off = u32(hdr + 42);
+        if (namelen >= sizeof(name) || csize == 0xffffffff || usize == 0xffffffff ||
+            local_off == 0xffffffff || (flags & 0x1)) {
             fclose(f);
             return -1;
         }
@@ -83,52 +125,73 @@ static int zip_iter(const char *zip,
             return -1;
         }
         name[namelen] = 0;
-        if (extralen) fseek(f, extralen, SEEK_CUR);
+        if (extralen && fseek(f, extralen, SEEK_CUR) != 0) {
+            fclose(f);
+            return -1;
+        }
+        if (commentlen && fseek(f, commentlen, SEEK_CUR) != 0) {
+            fclose(f);
+            return -1;
+        }
+        if (name[0] && name[strlen(name) - 1] == '/') continue;
+        if (zip_member_skip(name)) continue;
         if (!zip_safe_name(name)) {
             fclose(f);
             return -1;
         }
-        cdata = malloc(csize ? csize : 1);
-        if (!cdata) {
-            fclose(f);
-            return -1;
-        }
-        if (csize && fread(cdata, 1, csize, f) != csize) {
-            free(cdata);
-            fclose(f);
-            return -1;
-        }
-        if (name[strlen(name) - 1] == '/') {
-            free(cdata);
-            continue;
-        }
-        if (method == 0) {
-            if (cb(name, cdata, csize, ctx) != 0) {
+        {
+            long cd_pos = ftell(f);
+            if (cd_pos < 0) {
+                fclose(f);
+                return -1;
+            }
+            if (fseek(f, (long)local_off, SEEK_SET) != 0 ||
+                fread(local, 1, 30, f) != 30 || u32(local) != 0x04034b50) {
+                fclose(f);
+                return -1;
+            }
+            if (fseek(f, (long)u16(local + 26) + (long)u16(local + 28), SEEK_CUR) != 0) {
+                fclose(f);
+                return -1;
+            }
+            cdata = malloc(csize ? csize : 1);
+            if (!cdata || (csize && fread(cdata, 1, csize, f) != csize)) {
                 free(cdata);
                 fclose(f);
                 return -1;
             }
-        } else if (method == 8) {
-            udata = malloc(usize ? usize : 1);
-            if (!udata || inflate_buf(cdata, csize, udata, usize) != 0) {
+            if (method == 0) {
+                if (cb(name, cdata, csize, ctx) != 0) {
+                    free(cdata);
+                    fclose(f);
+                    return -1;
+                }
+            } else if (method == 8) {
+                udata = malloc(usize ? usize : 1);
+                if (!udata || inflate_buf(cdata, csize, udata, usize) != 0) {
+                    free(udata);
+                    free(cdata);
+                    fclose(f);
+                    return -1;
+                }
+                if (cb(name, udata, usize, ctx) != 0) {
+                    free(udata);
+                    free(cdata);
+                    fclose(f);
+                    return -1;
+                }
                 free(udata);
+            } else {
                 free(cdata);
                 fclose(f);
                 return -1;
             }
-            if (cb(name, udata, usize, ctx) != 0) {
-                free(udata);
-                free(cdata);
-                fclose(f);
-                return -1;
-            }
-            free(udata);
-        } else {
             free(cdata);
-            fclose(f);
-            return -1;
+            if (fseek(f, cd_pos, SEEK_SET) != 0) {
+                fclose(f);
+                return -1;
+            }
         }
-        free(cdata);
     }
     fclose(f);
     return 0;
@@ -166,7 +229,7 @@ static int file_cb(const char *name, const unsigned char *data, size_t n, void *
     if (c->found) return 0;
     sl = strrchr(name, '/');
     if (sl) base = sl + 1;
-    if (strcmp(name, c->member) && strcmp(base, c->member)) return 0;
+    if (strcasecmp(name, c->member) && strcasecmp(base, c->member)) return 0;
     if (n >= c->cap) n = c->cap - 1;
     memcpy(c->out, data, n);
     c->out[n] = 0;

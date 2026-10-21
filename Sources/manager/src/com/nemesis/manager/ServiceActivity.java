@@ -1,6 +1,7 @@
 package com.nemesis.manager;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.AdapterView;
@@ -12,6 +13,7 @@ import java.util.ArrayList;
 
 public class ServiceActivity extends Activity {
     private final ArrayList<TwoLineAdapter.Row> rows = new ArrayList<TwoLineAdapter.Row>();
+    private TwoLineAdapter adapter;
     private int selected = -1;
 
     @Override
@@ -30,6 +32,7 @@ public class ServiceActivity extends Activity {
         lv.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             public void onItemClick(AdapterView<?> p, View v, int pos, long id) {
                 selected = pos;
+                if (adapter != null) adapter.setSelected(pos);
             }
         });
         Button a = (Button) findViewById(R.id.btn_a);
@@ -44,9 +47,25 @@ public class ServiceActivity extends Activity {
         });
         b.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                runOp("stop");
+                if (selected < 0 || selected >= rows.size()) {
+                    Ui.toast(ServiceActivity.this, R.string.select_item);
+                    return;
+                }
+                String name = rows.get(selected).key;
+                if (name == null || name.length() == 0) return;
+                Intent ask = new Intent(ServiceActivity.this, DialogActivity.class);
+                ask.putExtra("nemesis_mode", "confirm_stop");
+                ask.putExtra("nemesis_id", name);
+                ask.putExtra("nemesis_message",
+                        getString(R.string.confirm_stop).replace("%s", rows.get(selected).title));
+                startActivity(ask);
             }
         });
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
         reload();
     }
 
@@ -78,9 +97,10 @@ public class ServiceActivity extends Activity {
                     public void run() {
                         rows.clear();
                         rows.addAll(next);
-                        ListView lv = (ListView) findViewById(R.id.list);
-                        if (lv != null) lv.setAdapter(new TwoLineAdapter(ServiceActivity.this, rows));
                         selected = -1;
+                        adapter = new TwoLineAdapter(ServiceActivity.this, rows);
+                        ListView lv = (ListView) findViewById(R.id.list);
+                        if (lv != null) lv.setAdapter(adapter);
                     }
                 });
             }

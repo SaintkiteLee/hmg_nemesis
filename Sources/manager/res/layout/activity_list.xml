@@ -27,9 +27,8 @@
                 android:layout_height="match_parent"
                 android:divider="@drawable/co_bg_list_line"
                 android:dividerHeight="1dp"
-                android:listSelector="@drawable/co_list_selector"
-                android:choiceMode="singleChoice"
-                android:cacheColorHint="#00000000"
+            android:listSelector="@drawable/co_list_selector"
+            android:cacheColorHint="#00000000"
                 android:paddingTop="6dp" />
         </FrameLayout>
         <LinearLayout

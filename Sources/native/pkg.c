@@ -1,6 +1,8 @@
 #include "nemesis.h"
 
 #include <dirent.h>
+#include <strings.h>
+#include <sys/system_properties.h>
 
 static int pkg_id_ok(const char *id) {
     size_t i, n;
@@ -237,27 +239,125 @@ static int load_zip_meta(const char *zip, ini_file *ini, char *id, char *name, c
     return meta_from_ini(ini, id, MAX_ID, name, MAX_NAME, types, 80);
 }
 
+static int safe_pkg_name(const char *s, char *out, size_t cap) {
+    size_t i;
+    if (!s || !*s || !out || cap < 2) return -1;
+    for (i = 0; s[i]; i++) {
+        char c = s[i];
+        int ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                 (c >= '0' && c <= '9') || c == '.' || c == '_';
+        if (!ok || i + 1 >= cap) return -1;
+    }
+    snprintf(out, cap, "%s", s);
+    return 0;
+}
+
+/* package= wins. Otherwise the package half of component=pkg/class. */
+static int android_pkg_id(const ini_file *ini, const char *sec, char *out, size_t cap) {
+    const char *pkg = ini_get(ini, sec, "package");
+    const char *comp = ini_get(ini, sec, "component");
+    char tmp[160];
+    const char *slash;
+    if (pkg && *pkg) return safe_pkg_name(pkg, out, cap);
+    if (!comp) return -1;
+    slash = strchr(comp, '/');
+    if (!slash || slash == comp || (size_t)(slash - comp) >= sizeof(tmp)) return -1;
+    memcpy(tmp, comp, (size_t)(slash - comp));
+    tmp[slash - comp] = 0;
+    return safe_pkg_name(tmp, out, cap);
+}
+
+static int shell_quoted_ok(const char *s) {
+    if (!s || !*s) return 0;
+    if (strchr(s, '\'') || strchr(s, '\n') || strchr(s, '\r')) return 0;
+    return 1;
+}
+
 static void pm_uninstall_apks(const ini_file *ini, const char *root) {
     int i;
+    (void)root;
     for (i = 0; i < 32; i++) {
-        char sec[32], cmd[MAX_PATH + 64];
-        const char *kind, *path;
+        char sec[32], apkid[160], cmd[256];
+        const char *kind;
         snprintf(sec, sizeof(sec), "app.%d", i);
         if (!ini_has_section(ini, sec)) continue;
         kind = ini_get(ini, sec, "kind");
-        path = ini_get(ini, sec, "path");
-        if (!kind || strcmp(kind, "apk") || !path) continue;
-        (void)root;
-        /* Best-effort: pm may not be up. */
-        snprintf(cmd, sizeof(cmd), "pm uninstall \"%s\" 2>/dev/null || true", path);
+        if (!kind || strcmp(kind, "apk")) continue;
+        if (android_pkg_id(ini, sec, apkid, sizeof(apkid)) != 0) continue;
+        /* Best-effort: pm may not be up. The Android package name, not the apk path. */
+        snprintf(cmd, sizeof(cmd), "/system/bin/pm uninstall %s >/dev/null 2>&1 || true", apkid);
         run_cmd(cmd);
     }
+}
+
+/*
+ * KitKat pm prints Success/Failure and almost always exits 0. Trust the text.
+ *
+ * HMG PackageManagerService.installNewPackageLI: when sys.boot_completed is 1,
+ * only allowlisted OEM signers may install. Anything else returns -104, which
+ * pm labels INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES even when that
+ * package was never installed. Clear the property for the install only, then
+ * put the previous value back. BOOT_COMPLETED is a one-shot broadcast; this
+ * does not rebroadcast it.
+ */
+static int pm_install_apk(const char *apk, const char *apkid) {
+    char cmd[MAX_PATH + 80];
+    char out[768];
+    char prev[96];
+    char pathout[256];
+    int cleared = 0;
+    int ok;
+
+    prev[0] = 0;
+    if (__system_property_get("sys.boot_completed", prev) > 0 && prev[0] == '1') {
+        if (__system_property_set("sys.boot_completed", "0") == 0) {
+            cleared = 1;
+            log_msg("pm: cleared sys.boot_completed for install");
+        } else {
+            log_msg("pm: WARN could not clear sys.boot_completed");
+        }
+    }
+
+    snprintf(cmd, sizeof(cmd), "/system/bin/pm install -r \"%s\"", apk);
+    run_cmd_capture(cmd, out, sizeof(out));
+    ok = strstr(out, "Success") != NULL;
+
+    /* A real replace with a different signer also returns -104. Only uninstall
+     * when pm path shows the package is already on the unit. */
+    if (!ok && apkid && *apkid && strstr(out, "INCONSISTENT_CERTIFICATES")) {
+        snprintf(cmd, sizeof(cmd), "/system/bin/pm path %s", apkid);
+        run_cmd_capture(cmd, pathout, sizeof(pathout));
+        if (strstr(pathout, "package:")) {
+            log_msg("pm: %s present with a different signer; uninstalling", apkid);
+            snprintf(cmd, sizeof(cmd), "/system/bin/pm uninstall %s", apkid);
+            run_cmd_capture(cmd, pathout, sizeof(pathout));
+            snprintf(cmd, sizeof(cmd), "/system/bin/pm install -r \"%s\"", apk);
+            run_cmd_capture(cmd, out, sizeof(out));
+            ok = strstr(out, "Success") != NULL;
+        }
+    }
+
+    if (cleared) {
+        if (__system_property_set("sys.boot_completed", prev) != 0)
+            log_msg("pm: WARN could not restore sys.boot_completed=%s", prev);
+    }
+
+    if (ok) return 0;
+    if (out[0]) {
+        char *nl = strchr(out, '\n');
+        if (nl) *nl = 0;
+        fprintf(stderr, "%s\n", out);
+        log_msg("pm install failed %s: %s", apk, out);
+    } else {
+        log_msg("pm install failed %s", apk);
+    }
+    return 1;
 }
 
 static int install_apks(const ini_file *ini, const char *root) {
     int i, rc = 0;
     for (i = 0; i < 32; i++) {
-        char sec[32], apk[MAX_PATH], cmd[MAX_PATH + 64];
+        char sec[32], apk[MAX_PATH], apkid[160];
         const char *kind, *path;
         snprintf(sec, sizeof(sec), "app.%d", i);
         if (!ini_has_section(ini, sec)) continue;
@@ -270,8 +370,13 @@ static int install_apks(const ini_file *ini, const char *root) {
             rc = 1;
             continue;
         }
-        snprintf(cmd, sizeof(cmd), "pm install -r \"%s\"", apk);
-        if (run_cmd(cmd) != 0) log_msg("pm install failed %s (ok if no zygote)", apk);
+        apkid[0] = 0;
+        android_pkg_id(ini, sec, apkid, sizeof(apkid));
+        if (pm_install_apk(apk, apkid[0] ? apkid : NULL) != 0) {
+            /* Android is down during recovery installs. A booted unit must not
+             * record the package when Package Manager rejected the apk. */
+            if (framework_up()) rc = 1;
+        }
     }
     return rc;
 }
@@ -406,7 +511,12 @@ static int do_fresh_install(const char *stage, ini_file *ini,
         log_msg("copy tree failed %s -> %s", stage, dest);
         return 1;
     }
-    install_apks(ini, dest);
+    if (install_apks(ini, dest) != 0) {
+        pm_uninstall_apks(ini, dest);
+        rm_rf(dest);
+        fprintf(stderr, "pm install failed\n");
+        return 1;
+    }
     register_services(ini, id, dest);
     memset(&rec, 0, sizeof(rec));
     snprintf(rec.id, sizeof(rec.id), "%s", id);
@@ -419,10 +529,51 @@ static int do_fresh_install(const char *stage, ini_file *ini,
     return rc;
 }
 
+static int dir_has_meta(const char *dir) {
+    DIR *d;
+    struct dirent *e;
+    int found = 0;
+    d = opendir(dir);
+    if (!d) return 0;
+    while ((e = readdir(d))) {
+        if (!strcasecmp(e->d_name, "NEMESIS.data")) {
+            found = 1;
+            break;
+        }
+    }
+    closedir(d);
+    return found;
+}
+
+/* Paths in NEMESIS.data are relative to the directory that contains it.
+ * A zip of the folder, rather than of its contents, still installs. */
+static int package_root(const char *stage, char *out, size_t cap) {
+    DIR *d;
+    struct dirent *e;
+    char child[MAX_PATH];
+    int hits = 0;
+    if (dir_has_meta(stage)) {
+        snprintf(out, cap, "%s", stage);
+        return 0;
+    }
+    d = opendir(stage);
+    if (!d) return -1;
+    while ((e = readdir(d))) {
+        if (e->d_name[0] == '.') continue;
+        if (!strcmp(e->d_name, "__MACOSX")) continue;
+        snprintf(child, sizeof(child), "%s/%s", stage, e->d_name);
+        if (!dir_has_meta(child)) continue;
+        hits++;
+        snprintf(out, cap, "%s", child);
+    }
+    closedir(d);
+    return hits == 1 ? 0 : -1;
+}
+
 int cmd_install(int argc, char **argv) {
     int update = 0, i, locked_exist = 0;
     const char *zip = NULL;
-    char stage[MAX_PATH], id[MAX_ID], name[MAX_NAME], types[80];
+    char stage[MAX_PATH], stage_top[MAX_PATH], id[MAX_ID], name[MAX_NAME], types[80];
     ini_file ini;
     pkg_rec existing;
     int have_existing;
@@ -462,6 +613,7 @@ int cmd_install(int argc, char **argv) {
         return 3;
     }
     snprintf(stage, sizeof(stage), "%s/stage/%s", NEMESIS_TMP, id);
+    snprintf(stage_top, sizeof(stage_top), "%s", stage);
     rm_rf(stage);
     mkdir_p(stage, 0755);
     if (zip_extract(zip, stage) != 0) {
@@ -469,6 +621,17 @@ int cmd_install(int argc, char **argv) {
         ini_free(&ini);
         rm_rf(stage);
         return 1;
+    }
+    {
+        char pkgroot[MAX_PATH];
+        if (package_root(stage, pkgroot, sizeof(pkgroot)) != 0) {
+            fprintf(stderr, "invalid package metadata\n");
+            ini_free(&ini);
+            rm_rf(stage);
+            return 1;
+        }
+        if (strcmp(pkgroot, stage))
+            snprintf(stage, sizeof(stage), "%s", pkgroot);
     }
     if (have_existing && update) {
         char oldroot[MAX_PATH], oldmeta[MAX_PATH];
@@ -490,7 +653,7 @@ int cmd_install(int argc, char **argv) {
     }
     i = do_fresh_install(stage, &ini, id, name, types, 0);
     ini_free(&ini);
-    rm_rf(stage);
+    rm_rf(stage_top);
     if (i == 0) fprintf(stdout, "ok %s %s\n", have_existing ? "updated" : "installed", id);
     return i;
 }
@@ -568,14 +731,41 @@ int cmd_pkg_launch(const char *id) {
         path = ini_get(&ini, sec, "path");
         comp = ini_get(&ini, sec, "component");
         pkg = ini_get(&ini, sec, "package");
-        if (comp && *comp) {
-            snprintf(cmd, sizeof(cmd), "am start -n '%s'", comp);
-            run_cmd(cmd);
-            launched = 1;
-        } else if (pkg && *pkg) {
-            snprintf(cmd, sizeof(cmd),
-                     "monkey -p '%s' -c android.intent.category.LAUNCHER 1", pkg);
-            run_cmd(cmd);
+        if ((comp && *comp) || (pkg && *pkg)) {
+            char apkid[160], apk[MAX_PATH];
+            const char *shown = (comp && *comp) ? comp : pkg;
+            if (!shell_quoted_ok(shown)) {
+                fprintf(stderr, "activity launch failed: %s\n", id);
+                ini_free(&ini);
+                return 1;
+            }
+            /* A NEMESIS install while Android is down leaves the apk on disk
+             * and never registers it. Launch is the next chance to install. */
+            if (framework_up() && kind && !strcmp(kind, "apk") && path && *path &&
+                android_pkg_id(&ini, sec, apkid, sizeof(apkid)) == 0) {
+                snprintf(cmd, sizeof(cmd), "/system/bin/pm path %s >/dev/null 2>&1", apkid);
+                if (run_cmd(cmd) != 0) {
+                    snprintf(apk, sizeof(apk), "%s/%s", root, path);
+                    if (pm_install_apk(apk, apkid) != 0) {
+                        fprintf(stderr, "pm install failed: %s\n", apk);
+                        ini_free(&ini);
+                        return 1;
+                    }
+                }
+            }
+            if (comp && *comp) {
+                snprintf(cmd, sizeof(cmd),
+                         "/system/bin/am start -n '%s' -f 0x10000000", comp);
+            } else {
+                snprintf(cmd, sizeof(cmd),
+                         "/system/bin/monkey -p '%s' -c android.intent.category.LAUNCHER 1",
+                         pkg);
+            }
+            if (run_cmd(cmd) != 0) {
+                fprintf(stderr, "activity launch failed: %s\n", shown);
+                ini_free(&ini);
+                return 1;
+            }
             launched = 1;
         } else if (kind && !strcmp(kind, "sh") && path && *path) {
             if (path[0] == '/') snprintf(script, sizeof(script), "%s", path);

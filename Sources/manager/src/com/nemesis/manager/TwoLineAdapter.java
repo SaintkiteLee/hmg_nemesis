@@ -26,10 +26,16 @@ final class TwoLineAdapter extends BaseAdapter {
 
     private final LayoutInflater inf;
     private final ArrayList<Row> rows;
+    private int selected = -1;
 
     TwoLineAdapter(Context ctx, ArrayList<Row> rows) {
         this.inf = LayoutInflater.from(ctx);
         this.rows = rows;
+    }
+
+    void setSelected(int pos) {
+        selected = pos;
+        notifyDataSetChanged();
     }
 
     public int getCount() {
@@ -58,9 +64,17 @@ final class TwoLineAdapter extends BaseAdapter {
             }
         }
         Row r = rows.get(pos);
+        boolean on = pos == selected;
+        v.setActivated(on);
+        v.setSelected(on);
+        v.setBackgroundResource(on ? R.drawable.co_btn_bg_list_sel : R.drawable.co_list_selector);
         TextView title = (TextView) v.findViewById(R.id.row_title);
-        if (title != null) title.setText(r.title);
-        else if (v instanceof TextView) ((TextView) v).setText(r.title);
+        if (title != null) {
+            title.setText(r.title);
+            title.setTextColor(on ? 0xFFFFFFFF : 0xFF62797F);
+        } else if (v instanceof TextView) {
+            ((TextView) v).setText(r.title);
+        }
         TextView s = (TextView) v.findViewById(R.id.row_summary);
         if (s != null) {
             if (r.summary == null || r.summary.length() == 0) {
@@ -68,6 +82,7 @@ final class TwoLineAdapter extends BaseAdapter {
             } else {
                 s.setVisibility(View.VISIBLE);
                 s.setText(r.summary);
+                s.setTextColor(on ? 0xFFFFFFFF : 0xFF888888);
             }
         }
         return v;

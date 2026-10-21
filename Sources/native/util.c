@@ -4,11 +4,20 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <sys/file.h>
+#include <sys/ioctl.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/system_properties.h>
 #include <sys/wait.h>
 #include <time.h>
+#ifdef __linux__
+#include <linux/fs.h>
+#endif
+
+#ifndef BLKROSET
+#define BLKROSET _IO(0x12, 93)
+#endif
 
 int log_msg(const char *fmt, ...) {
     char line[MAX_LINE];
@@ -28,8 +37,9 @@ int log_msg(const char *fmt, ...) {
         line[len + 1] = 0;
     }
     fputs(line, stderr);
-    mkdir_p(NEMESIS_TMP, 0755);
-    append_file(NEMESIS_TMP "/nemesis.log", line);
+    mkdir_p(NEMESIS_ROOT, 0755);
+    append_file(NEMESIS_LOGFILE, line);
+    chmod(NEMESIS_LOGFILE, 0666);
     return 0;
 }
 
@@ -66,6 +76,28 @@ int mkdir_p(const char *path, mode_t mode) {
     return 0;
 }
 
+static void install_mount_wrap(void) {
+    static const char wrap[] =
+        "#!/system/bin/sh\n"
+        "_a=\" $* \"\n"
+        "case \"$_a\" in\n"
+        "*' remount'*)\n"
+        "  case \"$_a\" in\n"
+        "  *'/system'*|*' / '*|*' /')\n"
+        "    case \"$_a\" in\n"
+        "    *',ro '*|*' ro '*|*'-o ro '*|*',ro') exec /system/xbin/nemesis remount ro ;;\n"
+        "    esac\n"
+        "    exec /system/xbin/nemesis remount rw\n"
+        "    ;;\n"
+        "  esac\n"
+        "  ;;\n"
+        "esac\n"
+        "if [ -x /system/bin/mount ]; then exec /system/bin/mount \"$@\"; fi\n"
+        "exec /system/bin/toolbox mount \"$@\"\n";
+    mkdir_p(NEMESIS_BINDIR, 0755);
+    write_file(NEMESIS_BINDIR "/mount", wrap, 0755);
+}
+
 int ensure_dirs(void) {
     mkdir_p(NEMESIS_ROOT, 0755);
     mkdir_p(NEMESIS_APPS, 0755);
@@ -73,14 +105,16 @@ int ensure_dirs(void) {
     mkdir_p(NEMESIS_LOGS, 0755);
     mkdir_p(PIDS_DIR, 0755);
     mkdir_p(SESSION_DIR, 0755);
+    mkdir_p(NEMESIS_BINDIR, 0755);
     chmod(NEMESIS_TMP, 0777);
     chmod(NEMESIS_LOGS, 0777);
     chmod(SESSION_DIR, 0777);
     chmod(NEMESIS_ROOT, 0755);
     chmod(PACKAGES_DB, 0644);
     chmod(SERVICES_DB, 0644);
-    chmod(NEMESIS_TMP "/nemesis.log", 0666);
+    chmod(NEMESIS_LOGFILE, 0666);
     chmod(BIN_PATH, 04755);
+    install_mount_wrap();
     return 0;
 }
 
@@ -112,9 +146,10 @@ static unsigned long mnt_flags_from_opts(const char *opts, int rw) {
     unsigned long f = MS_REMOUNT;
     if (!rw) f |= MS_RDONLY;
     if (!opts) return f;
-    /* Drop nosuid on rw remount so /system/xbin/nemesis SUID can work.
-     * Watchdog still serves a root socket because fs_mgr may restore nosuid. */
-    if (rw == 0 && strstr(opts, "nosuid")) f |= MS_NOSUID;
+    /* Keep nosuid/nodev. Clearing MS_NOSUID on a locked Android mount EPERMs the
+     * whole remount, including the ro→rw flip. SUID is ignored on nosuid; the
+     * watchdog socket is the root channel. */
+    if (strstr(opts, "nosuid")) f |= MS_NOSUID;
     if (strstr(opts, "nodev")) f |= MS_NODEV;
     if (strstr(opts, "noexec")) f |= MS_NOEXEC;
 #ifdef MS_NOATIME
@@ -132,41 +167,66 @@ static unsigned long mnt_flags_from_opts(const char *opts, int rw) {
     return f;
 }
 
+static void blk_set_rw(const char *dev) {
+    int fd, ro = 0;
+    if (!dev || strncmp(dev, "/dev/", 5) != 0) return;
+    fd = open(dev, O_RDONLY);
+    if (fd < 0) return;
+    ioctl(fd, BLKROSET, &ro);
+    close(fd);
+}
+
+static int probe_system_rw(void) {
+    int fd = open("/system/xbin/.nemesis-rw", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) return -1;
+    close(fd);
+    unlink("/system/xbin/.nemesis-rw");
+    return 0;
+}
+
+static int remount_one(const char *dev, const char *mnt, const char *fstype,
+                       const char *opts, int rw) {
+    unsigned long flags = mnt_flags_from_opts(opts, rw);
+    unsigned long minimal = MS_REMOUNT | (rw ? 0UL : MS_RDONLY);
+    int e1 = 0, e2 = 0;
+    blk_set_rw(dev);
+    if (mount(dev, mnt, fstype, flags, NULL) == 0) return 0;
+    e1 = errno;
+    if (mount(dev, mnt, fstype, flags | MS_NOSUID | MS_NODEV, NULL) == 0) return 0;
+    if (mount(dev, mnt, fstype, minimal | MS_NOSUID | MS_NODEV, NULL) == 0) return 0;
+    if (mount(dev, mnt, fstype, minimal, NULL) == 0) return 0;
+    e2 = errno;
+    if (mount(dev, mnt, NULL, flags, NULL) == 0) return 0;
+    log_msg("mount(%s -> %s remount %s) errno=%d/%d/%d",
+            dev, mnt, rw ? "rw" : "ro", e1, e2, errno);
+    return -1;
+}
+
 int remount_system(int rw) {
     char buf[512], dev[128], mnt[128], fstype[64], opts[256];
     FILE *f;
-    int got_system = 0;
+    int saw_system = 0, ok = 0;
+    if (rw && probe_system_rw() == 0) return 0;
     f = fopen("/proc/mounts", "r");
     if (f) {
         while (fgets(buf, sizeof(buf), f)) {
-            unsigned long flags;
             if (sscanf(buf, "%127s %127s %63s %255s", dev, mnt, fstype, opts) != 4) continue;
             if (strcmp(mnt, "/system") != 0) continue;
-            flags = mnt_flags_from_opts(opts, rw);
-            if (mount(dev, mnt, fstype, flags, NULL) == 0) {
-                if (!strcmp(mnt, "/system")) got_system = 1;
-            } else {
-                log_msg("mount(%s -> %s remount %s) errno=%d", dev, mnt, rw ? "rw" : "ro", errno);
+            saw_system = 1;
+            if (remount_one(dev, mnt, fstype, opts, rw) == 0) ok = 1;
+        }
+        if (!saw_system) {
+            rewind(f);
+            while (fgets(buf, sizeof(buf), f)) {
+                if (sscanf(buf, "%127s %127s %63s %255s", dev, mnt, fstype, opts) != 4) continue;
+                if (strcmp(mnt, "/") != 0) continue;
+                if (remount_one(dev, mnt, fstype, opts, rw) == 0) ok = 1;
             }
         }
         fclose(f);
     }
-    if (rw) {
-        int fd = open("/system/xbin/.nemesis-rw", O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        if (fd >= 0) {
-            close(fd);
-            unlink("/system/xbin/.nemesis-rw");
-            return 0;
-        }
-    } else if (got_system) {
-        return 0;
-    }
-    if (rw) {
-        if (run_cmd("mount -o remount,rw /system") == 0) return 0;
-        if (run_cmd("mount -o rw,remount /system") == 0) return 0;
-        return 1;
-    }
-    return run_cmd("mount -o remount,ro /system");
+    if (rw) return probe_system_rw() == 0 ? 0 : 1;
+    return ok ? 0 : 1;
 }
 
 int read_file(const char *path, char *buf, size_t cap) {
@@ -309,6 +369,51 @@ int run_cmd(const char *cmd) {
     return 1;
 }
 
+int run_cmd_capture(const char *cmd, char *out, size_t cap) {
+    int p[2];
+    pid_t pid;
+    int st, rc;
+    size_t used = 0;
+    if (out && cap) out[0] = 0;
+    if (!cmd || !*cmd) return 0;
+    if (pipe(p) != 0) return run_cmd(cmd);
+    pid = fork();
+    if (pid < 0) {
+        close(p[0]);
+        close(p[1]);
+        return -1;
+    }
+    if (pid == 0) {
+        close(p[0]);
+        dup2(p[1], 1);
+        dup2(p[1], 2);
+        if (p[1] > 2) close(p[1]);
+        execl("/system/bin/sh", "sh", "-c", cmd, (char *)NULL);
+        _exit(127);
+    }
+    close(p[1]);
+    for (;;) {
+        char buf[512];
+        ssize_t n = read(p[0], buf, sizeof(buf));
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (n == 0) break;
+        if (out && cap > 1 && used + 1 < cap) {
+            size_t take = (size_t)n;
+            if (used + take > cap - 1) take = cap - 1 - used;
+            memcpy(out + used, buf, take);
+            used += take;
+            out[used] = 0;
+        }
+    }
+    close(p[0]);
+    rc = 1;
+    if (waitpid(pid, &st, 0) >= 0 && WIFEXITED(st)) rc = WEXITSTATUS(st);
+    return rc;
+}
+
 int run_script(const char *script, const char *cwd, const char *uid_name) {
     pid_t pid;
     int st;
@@ -328,6 +433,8 @@ int run_script(const char *script, const char *cwd, const char *uid_name) {
     if (pid < 0) return -1;
     if (pid == 0) {
         if (cwd && *cwd) chdir(cwd);
+        setenv("PATH", NEMESIS_PATH, 1);
+        setenv("LD_LIBRARY_PATH", "/vendor/lib:/system/lib", 1);
         if (uid) {
             setgid(gid);
             setuid(uid);
@@ -360,25 +467,94 @@ int pid_alive(pid_t pid) {
     return 1;
 }
 
+int proc_cmdline_has(pid_t pid, const char *needle) {
+    char path[64], buf[512];
+    int fd, n, i;
+    if (pid <= 0 || !needle || !needle[0]) return 0;
+    snprintf(path, sizeof(path), "/proc/%d/cmdline", (int)pid);
+    fd = open(path, O_RDONLY);
+    if (fd < 0) return 0;
+    n = (int)read(fd, buf, sizeof(buf) - 1);
+    close(fd);
+    if (n <= 0) return 0;
+    for (i = 0; i < n; i++) if (buf[i] == '\0') buf[i] = ' ';
+    buf[n] = 0;
+    return strstr(buf, needle) != NULL;
+}
+
+/* starttime is field 22 of /proc/pid/stat (20th token after comm). */
+static unsigned long proc_starttime(pid_t pid) {
+    char path[64], buf[512], *rp;
+    int fd, n, i;
+    if (pid <= 0) return 0;
+    snprintf(path, sizeof(path), "/proc/%d/stat", (int)pid);
+    fd = open(path, O_RDONLY);
+    if (fd < 0) return 0;
+    n = (int)read(fd, buf, sizeof(buf) - 1);
+    close(fd);
+    if (n <= 0) return 0;
+    buf[n] = 0;
+    rp = strrchr(buf, ')');
+    if (!rp) return 0;
+    rp++;
+    for (i = 0; i < 20; i++) {
+        while (*rp == ' ') rp++;
+        if (!*rp) return 0;
+        if (i == 19) return strtoul(rp, NULL, 10);
+        while (*rp && *rp != ' ') rp++;
+    }
+    return 0;
+}
+
 int write_pidfile(const char *path, pid_t pid) {
-    char b[32];
-    snprintf(b, sizeof(b), "%d\n", (int)pid);
+    char b[64];
+    unsigned long st = proc_starttime(pid);
+    if (st)
+        snprintf(b, sizeof(b), "%d %lu\n", (int)pid, st);
+    else
+        snprintf(b, sizeof(b), "%d\n", (int)pid);
     return write_file(path, b, 0644);
 }
 
 pid_t read_pidfile(const char *path) {
-    char b[32];
+    char b[64];
     if (read_file(path, b, sizeof(b)) < 0) return 0;
     return (pid_t)atoi(b);
+}
+
+int pidfile_is(const char *path, const char *needle) {
+    char b[64], *sp;
+    pid_t pid;
+    unsigned long saved, now;
+    if (read_file(path, b, sizeof(b)) < 0) return 0;
+    pid = (pid_t)atoi(b);
+    if (!pid_alive(pid)) return 0;
+    sp = strchr(b, ' ');
+    saved = (sp && sp[1]) ? strtoul(sp + 1, NULL, 10) : 0;
+    now = proc_starttime(pid);
+    if (saved && now && saved != now) return 0;
+    if (saved && now && saved == now) return 1;
+    if (!needle || !needle[0]) return 0;
+    return proc_cmdline_has(pid, needle);
+}
+
+int pidfile_lock(const char *path) {
+    char lk[MAX_PATH];
+    int fd;
+    snprintf(lk, sizeof(lk), "%s.lock", path);
+    fd = open(lk, O_CREAT | O_RDWR, 0644);
+    if (fd < 0) return -1;
+    if (flock(fd, LOCK_EX) != 0) {
+        close(fd);
+        return -1;
+    }
+    return fd;
 }
 
 int usb0_mounted(void) {
     char buf[4096];
     FILE *f = fopen("/proc/mounts", "r");
-    if (!f)
-        return (is_dir(USB0) && path_exists(USB0)) ||
-               (is_dir(USB1) && path_exists(USB1)) ||
-               (is_dir(USB2) && path_exists(USB2));
+    if (!f) return 0;
     while (fgets(buf, sizeof(buf), f)) {
         if (strstr(buf, " /storage/usb0 ") || strstr(buf, " /mnt/media_rw/usb0 ") ||
             strstr(buf, " /storage/usb1 ") || strstr(buf, " /mnt/media_rw/usb1 ") ||
@@ -392,28 +568,69 @@ int usb0_mounted(void) {
 }
 
 /* Leave the caller's process group so Android init oneshot services (flash_recovery,
- * qb_uid_check) cannot kill watchdog when their shell exits. Parent returns 1. */
+ * qb_uid_check) cannot kill watchdog when their shell exits.
+ * Parent blocks until the grandchild calls daemon_ready() (after setsid) and
+ * returns 1. The daemon process returns 0. -1 if detach failed. */
+static int ready_fd = -1;
+
 int detach_daemon(void) {
+    int p[2];
     pid_t pid;
-    int fd;
+    char c;
+    int n;
+    if (pipe(p) != 0) return -1;
     pid = fork();
-    if (pid < 0) return -1;
-    if (pid > 0) return 1;
-    if (setsid() < 0) _exit(1);
+    if (pid < 0) {
+        close(p[0]);
+        close(p[1]);
+        return -1;
+    }
+    if (pid > 0) {
+        close(p[1]);
+        do {
+            n = (int)read(p[0], &c, 1);
+        } while (n < 0 && errno == EINTR);
+        close(p[0]);
+        waitpid(pid, NULL, 0);
+        return n == 1 ? 1 : -1;
+    }
+    close(p[0]);
+    if (setsid() < 0) {
+        close(p[1]);
+        _exit(1);
+    }
     signal(SIGHUP, SIG_IGN);
     signal(SIGPIPE, SIG_IGN);
     pid = fork();
-    if (pid < 0) _exit(1);
-    if (pid > 0) _exit(0);
+    if (pid < 0) {
+        close(p[1]);
+        _exit(1);
+    }
+    if (pid > 0) {
+        close(p[1]);
+        _exit(0);
+    }
     umask(0);
-    fd = open("/dev/null", O_RDWR);
-    if (fd >= 0) {
-        dup2(fd, 0);
-        dup2(fd, 1);
-        dup2(fd, 2);
-        if (fd > 2) close(fd);
+    ready_fd = p[1];
+    {
+        int fd = open("/dev/null", O_RDWR);
+        if (fd >= 0) {
+            dup2(fd, 0);
+            dup2(fd, 1);
+            dup2(fd, 2);
+            if (fd > 2) close(fd);
+        }
     }
     return 0;
+}
+
+void daemon_ready(void) {
+    if (ready_fd < 0) return;
+    if (write(ready_fd, "1", 1) < 0) {
+        /* parent already gone; keep running */
+    }
+    close(ready_fd);
+    ready_fd = -1;
 }
 
 int framework_up(void) {
@@ -466,7 +683,7 @@ int become_root(void) {
     }
     setgid(0);
     setuid(0);
-    setenv("PATH", "/sbin:/vendor/bin:/system/sbin:/system/bin:/system/xbin", 1);
+    setenv("PATH", NEMESIS_PATH, 1);
     setenv("LD_LIBRARY_PATH", "/vendor/lib:/system/lib", 1);
     return 0;
 }

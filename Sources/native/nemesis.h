@@ -14,11 +14,14 @@
 #define NEMESIS_ROOT "/data/nemesis"
 #define NEMESIS_APPS "/data/nemesis/apps"
 #define NEMESIS_TMP "/data/local/tmp/nemesis"
-#define NEMESIS_LOGS "/data/local/tmp/nemesis/logs"
+#define NEMESIS_LOGS "/data/nemesis/logs"
+#define NEMESIS_LOGFILE "/data/nemesis/nemesis.log"
+#define NEMESIS_BINDIR "/data/nemesis/bin"
+#define NEMESIS_PATH "/data/nemesis/bin:/sbin:/vendor/bin:/system/sbin:/system/bin:/system/xbin"
 #define PACKAGES_DB "/data/nemesis/packages.db"
 #define SERVICES_DB "/data/nemesis/services.db"
-#define PIDS_DIR "/data/local/tmp/nemesis/pids"
-#define SESSION_DIR "/data/local/tmp/nemesis/usb-session"
+#define PIDS_DIR "/data/nemesis/pids"
+#define SESSION_DIR "/data/nemesis/usb-session"
 #define USB0 "/storage/usb0"
 #define USB0_MNT "/mnt/media_rw/usb0"
 #define USB1 "/storage/usb1"
@@ -34,8 +37,8 @@
 #define MANAGER_DIALOG "com.nemesis.manager/.DialogActivity"
 #define MANAGER_MAIN "com.nemesis.manager/.MainActivity"
 #define MANAGER_APK "/system/app/NEMESIS.apk"
-#define WD_PIDFILE "/data/local/tmp/nemesis/watchdog.pid"
-#define SM_PIDFILE "/data/local/tmp/nemesis/svcmgr.pid"
+#define WD_PIDFILE "/data/nemesis/watchdog.pid"
+#define SM_PIDFILE "/data/nemesis/svcmgr.pid"
 #define SU_SOCK_DEV "/dev/nemesis.sock"
 #define SU_SOCK_DATA "/data/nemesis/root.sock"
 
@@ -87,14 +90,21 @@ int write_file(const char *path, const char *data, mode_t mode);
 int append_file(const char *path, const char *data);
 int remount_system(int rw);
 int run_cmd(const char *cmd);
+/* Combined stdout+stderr in out. Returns the process exit status. */
+int run_cmd_capture(const char *cmd, char *out, size_t cap);
 void purge_manager_dalvik(void);
 int run_script(const char *script, const char *cwd, const char *uid_name);
 int pid_alive(pid_t pid);
+int proc_cmdline_has(pid_t pid, const char *needle);
 int write_pidfile(const char *path, pid_t pid);
 pid_t read_pidfile(const char *path);
+/* 1 if pidfile still refers to this process (start time, or cmdline for old files). */
+int pidfile_is(const char *path, const char *needle);
+int pidfile_lock(const char *path);
 int usb0_mounted(void);
 int framework_up(void);
 int detach_daemon(void);
+void daemon_ready(void);
 void qname_join(char *out, size_t cap, const char *id, const char *local);
 int qname_split(const char *qname, char *id, size_t idcap, char *local, size_t lcap);
 void pid_path_for(char *out, size_t cap, const char *qname);
@@ -132,6 +142,7 @@ int svc_stop(const char *qname);
 int svc_status(const char *qname);
 
 int cmd_root(int argc, char **argv);
+int cmd_remount(int argc, char **argv);
 int cmd_log(int argc, char **argv);
 int cmd_usb_handler(void);
 
@@ -140,5 +151,6 @@ int su_listen(int fds[2]);
 int su_poll(int fds[2], int nfds, int timeout_ms);
 int su_client_main(int argc, char **argv);
 int su_ping(void);
+int su_ping_tries(int tries);
 
 #endif

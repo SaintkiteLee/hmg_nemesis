@@ -13,6 +13,7 @@ import java.util.ArrayList;
 
 public class PackageActivity extends Activity {
     private final ArrayList<TwoLineAdapter.Row> rows = new ArrayList<TwoLineAdapter.Row>();
+    private TwoLineAdapter adapter;
     private int selected = -1;
 
     @Override
@@ -31,6 +32,7 @@ public class PackageActivity extends Activity {
         lv.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             public void onItemClick(AdapterView<?> p, View v, int pos, long id) {
                 selected = pos;
+                if (adapter != null) adapter.setSelected(pos);
             }
         });
         Button a = (Button) findViewById(R.id.btn_a);
@@ -71,19 +73,19 @@ public class PackageActivity extends Activity {
                     startActivity(i);
                     return;
                 }
-                final String id = row.key;
-                new Thread(new Runnable() {
-                    public void run() {
-                        Cli.runRc("uninstall", id);
-                        runOnUiThread(new Runnable() {
-                            public void run() {
-                                reload();
-                            }
-                        });
-                    }
-                }).start();
+                Intent ask = new Intent(PackageActivity.this, DialogActivity.class);
+                ask.putExtra("nemesis_mode", "confirm_uninstall");
+                ask.putExtra("nemesis_id", row.key);
+                ask.putExtra("nemesis_message",
+                        getString(R.string.confirm_uninstall).replace("%s", row.title));
+                startActivity(ask);
             }
         });
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
         reload();
     }
 
@@ -96,9 +98,10 @@ public class PackageActivity extends Activity {
                     public void run() {
                         rows.clear();
                         rows.addAll(next);
-                        ListView lv = (ListView) findViewById(R.id.list);
-                        if (lv != null) lv.setAdapter(new TwoLineAdapter(PackageActivity.this, rows));
                         selected = -1;
+                        adapter = new TwoLineAdapter(PackageActivity.this, rows);
+                        ListView lv = (ListView) findViewById(R.id.list);
+                        if (lv != null) lv.setAdapter(adapter);
                     }
                 });
             }

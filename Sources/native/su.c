@@ -323,20 +323,24 @@ static int connect_path(const char *path) {
     return fd;
 }
 
-static int connect_retry(void) {
+static int connect_retry_n(int tries) {
     int i, j, fd;
-    for (i = 0; i < 50; i++) {
+    if (tries < 1) tries = 1;
+    for (i = 0; i < tries; i++) {
         for (j = 0; su_paths[j]; j++) {
             fd = connect_path(su_paths[j]);
             if (fd >= 0) return fd;
         }
-        usleep(200000);
+        if (i + 1 < tries) usleep(200000);
     }
     return -1;
 }
 
-int su_ping(void) {
-    int fd = connect_retry();
+static int connect_retry(void) {
+    return connect_retry_n(50);
+}
+
+static int ping_fd(int fd) {
     uint32_t rc, len;
     if (fd < 0) return -1;
     if (io_all(fd, (void *)SU_MAGIC, 4, 1) != 4 || wr_u32(fd, 0) != 0 ||
@@ -350,6 +354,14 @@ int su_ping(void) {
     }
     close(fd);
     return rc == 0 ? 0 : -1;
+}
+
+int su_ping_tries(int tries) {
+    return ping_fd(connect_retry_n(tries));
+}
+
+int su_ping(void) {
+    return su_ping_tries(50);
 }
 
 static int relay(int sock) {

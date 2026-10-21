@@ -10,6 +10,19 @@
     <string name="services">Services</string>
     <string name="logs">Logs</string>
     <string name="wipe">Wipe NEMESIS</string>
+    <string name="options">Options</string>
+    <string name="options_sum">Choose the button that opens Manager</string>
+    <string name="trigger_button">Trigger button</string>
+    <string name="trigger_hint">Three quick presses open Manager. The button\'s normal action still runs.</string>
+    <string name="selected">Selected</string>
+    <string name="installing">Installing…</string>
+    <string name="uninstalling">Uninstalling…</string>
+    <string name="updating">Updating…</string>
+    <string name="wiping">Removing NEMESIS…</string>
+    <string name="working">Please wait…</string>
+    <string name="engineering">Open Engineering Mode</string>
+    <string name="dealer">Open Dealer Mode</string>
+    <string name="open_fail">Could not open that screen.</string>
     <string name="launch">Launch</string>
     <string name="uninstall">Uninstall</string>
     <string name="start">Start</string>
@@ -26,11 +39,16 @@
     <string name="locked_tag">locked</string>
     <string name="confirm_execute">A compatible package has been found on the connected USB drive, do you wish to execute it?</string>
     <string name="confirm_install">A compatible installation package has been found on the connected USB drive, do you wish to install it?</string>
+    <string name="confirm_install_named">A package named \"%s\" has been found on the connected USB drive. Do you wish to install it?</string>
+    <string name="uninstall_first">Uninstall \"%s\" before installing the package on the USB drive.</string>
+    <string name="uninstall_first_noname">Uninstall the installed package before installing the one on the USB drive.</string>
     <string name="confirm_open">Open NEMESIS Manager?</string>
     <string name="invalid">Invalid package descriptor on the connected USB drive.</string>
     <string name="forbidden">This package cannot be updated or uninstalled except via Wipe NEMESIS.</string>
     <string name="result_ok">Operation completed successfully.</string>
     <string name="result_fail">Operation failed.</string>
     <string name="wipe_q">This will remove NEMESIS and all packages. Continue?</string>
+    <string name="confirm_uninstall">Uninstall \"%s\"?</string>
+    <string name="confirm_stop">Stop \"%s\"?</string>
     <string name="title">NEMESIS</string>
 </resources>

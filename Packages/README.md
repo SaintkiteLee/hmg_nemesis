@@ -1,13 +1,13 @@
 # Pre-made Packages
-This directory contains packages which can be installed on your car via NEMESIS Manager.
 
-## **Installation Guidance**
-Download the files from the desired folder into the root of an exFAT or FAT32 formatted USB drive. Only one NEMESIS package may exist on your USB drive at once.
+This folder keeps the USB stick descriptor for each catalog entry. The package source and the zip named in `NEMESIS.data` are not in this repository.
+
+Use one NEMESIS package on the USB drive at a time. Copy `NEMESIS.data` to the stick root and the zip to the relative `path` in that descriptor (`packages/<id>.zip`).
 
 ## Catalog
 
 | Name | Description | Compatibility |
 | ---- | ----------- | ------------- |
-| Turn-by-Turn Guidance for Phone Projection | Implements full Turn-by-Turn guidance for Android Auto and Apple CarPlay for Cluster and HUD | Package built for KIA EV6 running on 260507 firmware |
-| Enable ADB | Removes hide flag which hides ADB options in Engineering Mode, after this package is installed, goto Engineering Mode > Module Info, Page 3 > Tap a few times on the left (or right) bottom corner of the screen, ADB menu will show up in the menu selector column. | Universal |
-| Enable Wireless Features | Enables WiFi control and Wireless Phone Projection, note that Apple CarPlay is currently not verified to work properly. | Will properly operate only on Head Units with WiFi modules |
+| Turn-by-Turn Guidance for Phone Projection | Cluster and HUD turn-by-turn guidance for Android Auto and Apple CarPlay | Kia EV6 firmware 260507 |
+| Enable ADB | Clears the hide flag on ADB in Engineering Mode. After install, open Engineering Mode, Module Info, page 3, and tap a corner of the screen until the ADB menu appears | Universal. The package snapshots the live unit and reboots |
+| Enable Wireless Features | Enables WiFi control and wireless phone projection. Apple CarPlay through this package is not verified | Head units with a WiFi module |

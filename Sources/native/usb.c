@@ -1,7 +1,49 @@
 #include "nemesis.h"
 
 #include <signal.h>
+#include <string.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
+
+static int looks_like_sys_remount(const char *cmd, int *rw_out) {
+    size_t n;
+    int saw_root = 0;
+    if (!cmd || !strstr(cmd, "mount") || !strstr(cmd, "remount")) return 0;
+    if (strstr(cmd, "/system")) {
+        /* ok */
+    } else {
+        n = strlen(cmd);
+        while (n && cmd[n - 1] == ' ') n--;
+        if (n >= 2 && cmd[n - 2] == ' ' && cmd[n - 1] == '/') saw_root = 1;
+        else if (n == 1 && cmd[0] == '/') saw_root = 1;
+        if (!saw_root) return 0;
+    }
+    if (rw_out) {
+        if (strstr(cmd, "rw")) *rw_out = 1;
+        else if (strstr(cmd, "ro")) *rw_out = 0;
+        else *rw_out = 1;
+    }
+    return 1;
+}
+
+int cmd_remount(int argc, char **argv) {
+    int rw = 1;
+    if (argc >= 1) {
+        if (!strcmp(argv[0], "ro") || !strcmp(argv[0], "readonly")) rw = 0;
+        else if (!strcmp(argv[0], "rw") || !strcmp(argv[0], "readwrite")) rw = 1;
+        else {
+            fprintf(stderr, "usage: nemesis remount [rw|ro]\n");
+            return 1;
+        }
+    }
+    if (remount_system(rw) != 0) {
+        fprintf(stderr, "remount /system %s failed\n", rw ? "rw" : "ro");
+        return 1;
+    }
+    printf("remount /system %s ok\n", rw ? "rw" : "ro");
+    fflush(stdout);
+    return 0;
+}
 
 int cmd_root(int argc, char **argv) {
     uid_t uid = 0;
@@ -44,8 +86,14 @@ int cmd_root(int argc, char **argv) {
             break;
         }
     }
+    if (uid == 0 && have_c && cmd[0]) {
+        int rw = 1;
+        if (looks_like_sys_remount(cmd, &rw))
+            return remount_system(rw) == 0 ? 0 : 1;
+    }
     setgid(gid);
     setuid(uid);
+    setenv("PATH", NEMESIS_PATH, 1);
     if (have_c && cmd[0]) {
         execl("/system/bin/sh", "sh", "-c", cmd, (char *)NULL);
         return 127;
@@ -64,8 +112,12 @@ int cmd_log(int argc, char **argv) {
         FILE *f;
         long sz, skip = 0;
         int n;
-        snprintf(path, sizeof(path), "%s/nemesis.log", NEMESIS_TMP);
+        snprintf(path, sizeof(path), "%s", NEMESIS_LOGFILE);
         f = fopen(path, "r");
+        if (!f) {
+            snprintf(path, sizeof(path), "%s/nemesis.log", NEMESIS_TMP);
+            f = fopen(path, "r");
+        }
         if (!f) {
             printf("(no log yet)\n");
             fflush(stdout);
@@ -310,7 +362,7 @@ static void do_execute(const char *full, const char *root) {
     }
 }
 
-static void do_install(const char *full) {
+static void do_install(const char *full, char *reply, size_t cap) {
     char info_id[MAX_ID] = "", info_name[MAX_NAME] = "";
     char nreply[128];
     pkg_rec rec;
@@ -331,62 +383,115 @@ static void do_install(const char *full) {
     inst = info_id[0] && pkg_find(info_id, &rec) == 0;
     if (inst) locked = rec.locked;
     if (inst && locked) {
-        usb_notify("forbidden", full, info_id, info_name, nreply, sizeof(nreply));
+        usb_notify("forbidden", full, info_id, info_name, reply, cap);
+        return;
+    }
+    /* Android is down: no dialog, keep the recovery update. With Android up,
+     * an installed package must be removed by the user before the USB copy. */
+    if (inst && !framework_up()) {
+        char cmd[MAX_PATH + 64];
+        int rc;
+        snprintf(cmd, sizeof(cmd), "%s install --update '%s'", BIN_PATH, full);
+        rc = run_cmd(cmd);
+        if (reply && cap) snprintf(reply, cap, "recovery");
+        usb_notify(rc == 0 ? "result_ok" : "result_fail", full, info_id, info_name,
+                   nreply, sizeof(nreply));
         return;
     }
     if (inst) {
-        if (!usb_confirm("update", full, info_id, info_name, nreply, sizeof(nreply))) return;
-        {
-            char cmd[MAX_PATH + 64];
-            int rc;
-            snprintf(cmd, sizeof(cmd), "%s install --update '%s'", BIN_PATH, full);
-            rc = run_cmd(cmd);
-            usb_notify(rc == 0 ? "result_ok" : "result_fail", full, info_id, info_name, nreply, sizeof(nreply));
-        }
+        usb_notify("uninstall_first", full, info_id, info_name, reply, cap);
         return;
     }
+    if (!usb_confirm("confirm_install", full, info_id, info_name, reply, cap)) return;
     {
         char cmd[MAX_PATH + 64];
         int rc;
         snprintf(cmd, sizeof(cmd), "%s install '%s'", BIN_PATH, full);
         rc = run_cmd(cmd);
-        usb_notify(rc == 0 ? "result_ok" : "result_fail", full, info_id, info_name, nreply, sizeof(nreply));
+        usb_notify(rc == 0 ? "result_ok" : "result_fail", full, info_id, info_name,
+                   nreply, sizeof(nreply));
     }
+}
+
+typedef struct {
+    unsigned long long dev;
+    unsigned long long ino;
+    unsigned long long size;
+    unsigned long mtime;
+} usb_ident;
+
+static int usb_ident_of(const char *path, usb_ident *id) {
+    struct stat st;
+    if (!id) return -1;
+    memset(id, 0, sizeof(*id));
+    if (stat(path, &st) != 0) return -1;
+    id->dev = (unsigned long long)st.st_dev;
+    id->ino = (unsigned long long)st.st_ino;
+    id->size = (unsigned long long)st.st_size;
+    id->mtime = (unsigned long)st.st_mtime;
+    return 0;
+}
+
+static int usb_ident_eq(const usb_ident *a, const usb_ident *b) {
+    return a && b && a->dev == b->dev && a->ino == b->ino &&
+           a->size == b->size && a->mtime == b->mtime;
 }
 
 int cmd_usb_handler(void) {
     int handled = 0;
     int wait_type = 0;
+    int have_ident = 0;
+    usb_ident last_id;
     signal(SIGHUP, SIG_IGN);
     signal(SIGPIPE, SIG_IGN);
     ensure_dirs();
+    memset(&last_id, 0, sizeof(last_id));
     log_msg("usb-handler start (android %s)", framework_up() ? "up" : "down");
     for (;;) {
+        char meta[MAX_PATH];
+        usb_ident cur;
         int mounted = usb0_mounted();
+        chmod(SESSION_DIR, 0777);
         if (!mounted) {
+            if (handled) log_msg("usb-handler rearm (unmounted)");
             handled = 0;
+            have_ident = 0;
             wait_type = 0;
             sleep(1);
             continue;
         }
-        if (handled) {
+        if (usb_meta_path(meta, sizeof(meta)) != 0) {
+            if (handled) log_msg("usb-handler rearm (descriptor gone)");
+            handled = 0;
+            have_ident = 0;
+            wait_type = 0;
+            sleep(1);
+            continue;
+        }
+        if (usb_ident_of(meta, &cur) == 0) {
+            if (handled && have_ident && usb_ident_eq(&cur, &last_id)) {
+                sleep(1);
+                continue;
+            }
+            if (handled && have_ident)
+                log_msg("usb-handler rearm (descriptor changed)");
+            handled = 0;
+        } else if (handled) {
             sleep(1);
             continue;
         }
         {
-            char meta[MAX_PATH], reply[128];
+            char reply[128];
             ini_file ini;
             const char *type, *rel, *root;
             int is_exec, is_inst, is_open;
             reply[0] = 0;
-            if (usb_meta_path(meta, sizeof(meta)) != 0) {
-                sleep(1);
-                continue;
-            }
             mkdir_p(SESSION_DIR, 0755);
+            chmod(SESSION_DIR, 0777);
             if (ini_load(&ini, meta) != 0) {
                 usb_notify("invalid", meta, "", "", reply, sizeof(reply));
                 handled = 1;
+                have_ident = usb_ident_of(meta, &last_id) == 0;
                 log_handled("", "", reply);
                 continue;
             }
@@ -404,6 +509,7 @@ int cmd_usb_handler(void) {
                 wait_type = 0;
                 usb_notify("invalid", meta, "", "", reply, sizeof(reply));
                 handled = 1;
+                have_ident = usb_ident_of(meta, &last_id) == 0;
                 log_handled("", "", reply);
                 continue;
             }
@@ -415,6 +521,7 @@ int cmd_usb_handler(void) {
             if (!is_exec && !is_inst && !is_open) {
                 usb_notify("invalid", meta, "", "", reply, sizeof(reply));
                 handled = 1;
+                have_ident = usb_ident_of(meta, &last_id) == 0;
                 log_handled(type, rel, reply);
                 ini_free(&ini);
                 continue;
@@ -422,6 +529,7 @@ int cmd_usb_handler(void) {
             if ((is_exec || is_inst) && !rel_ok(rel)) {
                 usb_notify("invalid", meta, "", "", reply, sizeof(reply));
                 handled = 1;
+                have_ident = usb_ident_of(meta, &last_id) == 0;
                 log_handled(type, rel, reply);
                 ini_free(&ini);
                 continue;
@@ -436,6 +544,7 @@ int cmd_usb_handler(void) {
                     log_msg("open manager spawned");
                 }
                 handled = 1;
+                have_ident = usb_ident_of(meta, &last_id) == 0;
                 log_handled(type, rel, reply);
                 ini_free(&ini);
                 sleep(1);
@@ -448,12 +557,12 @@ int cmd_usb_handler(void) {
                     if (usb_confirm("confirm_execute", full, "", "", reply, sizeof(reply)))
                         do_execute(full, root);
                 } else {
-                    if (usb_confirm("confirm_install", full, "", "", reply, sizeof(reply)))
-                        do_install(full);
+                    do_install(full, reply, sizeof(reply));
                 }
             }
             ini_free(&ini);
             handled = 1;
+            have_ident = usb_ident_of(meta, &last_id) == 0;
             log_handled(type, rel, reply);
         }
         sleep(1);

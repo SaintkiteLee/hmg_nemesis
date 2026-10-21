@@ -32,7 +32,7 @@ Copy **`ota_package.tar`** to the **root** of the USB stick (the name the DSP ag
 1. Engineering Mode → USB Copy → **DSP** → **Update OTA**.
 2. Confirm extract: **UNTAR OK** / `OTA_PKG_EXTRACT true`, then `Success to execute,troubleShooter`.
 3. **Error 684** afterward is expected (`ota_info` absent). **651** means the tar did not extract.
-4. The script shows Engineering Mode toasts, writes `/system`, `sync`s, clears `/storage/upgrade/*`, sleeps 5 seconds, **reboots**.
+4. The script shows **Welcome to NEMESIS.**, then **Installing...**, writes `/system`, `sync`s, and shows **NEMESIS installation completed successfully, restarting.** It then runs `/data/nemesis/ota-finish.sh`, which sleeps 5 seconds, deletes `/storage/upgrade/*`, `sync`s, and **reboots**. The delete happens after the script has handed off, so removing `/storage/upgrade` does not cut off the toast.
 
 MAP_PREPARE `execl`s `/storage/upgrade/troubleShooter` as **uid 0 / gid system** **before** RSA validation. See document 01.
 

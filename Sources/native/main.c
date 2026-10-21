@@ -8,10 +8,11 @@ static void usage(void) {
             "nemesis pkg-info <zip>\n"
             "nemesis pkg-launch <package-id>\n"
             "nemesis root [uid] [-c command]\n"
+            "nemesis remount [rw|ro]\n"
             "nemesis service start|status|stop|list <package-id>/<name>\n"
             "nemesis log dump|logcat|dmesg|service ...\n"
             "nemesis wipe --confirm\n"
-            "nemesis watchdog | svcmgr | usb-handler\n");
+            "nemesis watchdog | svcmgr | usb-handler | ping\n");
 }
 
 int main(int argc, char **argv) {
@@ -21,6 +22,7 @@ int main(int argc, char **argv) {
         return 1;
     }
     op = argv[1];
+    if (!strcmp(op, "ping")) return su_ping_tries(3) == 0 ? 0 : 1;
     if (geteuid() != 0) {
         if (!strcmp(op, "watchdog") || !strcmp(op, "svcmgr") ||
             !strcmp(op, "usb-handler")) {
@@ -39,6 +41,7 @@ int main(int argc, char **argv) {
     if (!strcmp(op, "pkg-info")) return cmd_pkg_info(argc > 2 ? argv[2] : NULL);
     if (!strcmp(op, "pkg-launch")) return cmd_pkg_launch(argc > 2 ? argv[2] : NULL);
     if (!strcmp(op, "root")) return cmd_root(argc - 2, argv + 2);
+    if (!strcmp(op, "remount")) return cmd_remount(argc - 2, argv + 2);
     if (!strcmp(op, "service")) return cmd_service(argc - 2, argv + 2);
     if (!strcmp(op, "log")) return cmd_log(argc - 2, argv + 2);
     if (!strcmp(op, "wipe")) return cmd_wipe(argc > 2 && !strcmp(argv[2], "--confirm"));

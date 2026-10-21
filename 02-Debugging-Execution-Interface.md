@@ -64,7 +64,13 @@ or:
 /system/xbin/nemesis pkg-list
 ```
 
-### 2.3 Manager, “Run USB NEMESIS.sh”
+### 2.3 Faceplate or steering button
+
+Three presses of the button chosen in **Options** open Manager. Presses more than 1.5 seconds apart start the count over. A second broadcast of the same physical press within 200 ms does not count. The button's normal action still runs.
+
+**Options** lists **Setup** and **Navigation**. A new install uses Navigation. A saved Setup stays Setup. Any other saved value, including an older Custom choice, becomes Navigation.
+
+### 2.4 Manager, “Run USB NEMESIS.sh”
 
 Inside Manager, **Run USB NEMESIS.sh** runs `/storage/usb0/NEMESIS.sh` through the CLI. That is a manual path; the USB Handler still requires `type=execute` in `NEMESIS.data` for automatic insert handling. See [05 — Run scripts](05-Run-Scripts.md).
 
@@ -78,6 +84,9 @@ Inside Manager, **Run USB NEMESIS.sh** runs `/storage/usb0/NEMESIS.sh` through t
 | Packages | List, Launch, Uninstall (locked packages refuse uninstall) |
 | Services | List, Start, Stop (`<package-id>/<local-name>`) |
 | Logs | Last NEMESIS log; **Copy to USB** writes `/storage/usb0/NEMESIS-logs` |
+| Options | Choose the button that opens Manager: Setup or Navigation |
+| Open Engineering Mode | Opens Engineering Mode |
+| Open Dealer Mode | Opens Dealer Mode |
 | Wipe NEMESIS | Confirm, then remove the interface and all packages |
 
 Close is on the title bar. Package and service screens add Launch / Uninstall or Start / Stop on the bottom bar.

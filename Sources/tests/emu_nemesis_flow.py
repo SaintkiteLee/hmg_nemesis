@@ -25,9 +25,12 @@ from guest import Guest  # noqa: E402
 QEMU_PID = None
 STARTED = False
 USB_SIM = "/data/local/tmp/usb-sim"
-SESSION_REPLY = "/data/local/tmp/nemesis/usb-session/reply"
-SESSION_LOG = "/data/local/tmp/nemesis/logs/usb-session.log"
-NEMESIS_LOG = "/data/local/tmp/nemesis/nemesis.log"
+SESSION_REPLY = "/data/nemesis/usb-session/reply"
+SESSION_LOG = "/data/nemesis/logs/usb-session.log"
+NEMESIS_LOG = "/data/nemesis/nemesis.log"
+WD_PID = "/data/nemesis/watchdog.pid"
+SM_PID = "/data/nemesis/svcmgr.pid"
+UH_PID = "/data/nemesis/pids/usb-handler+usb-handler"
 
 
 def port_open() -> bool:
@@ -56,6 +59,21 @@ def make_fixture_zips() -> None:
     with zipfile.ZipFile(out / "empty-meta.zip", "w") as z:
         z.writestr("README.txt", "no metadata\n")
     (out / "garbage.bin").write_bytes(b"not a zip\x00\x01\x02")
+    apk_only = (
+        "[nemesis]\nversion=1.0\nid=launch.apk\nname=Launch APK\ntypes=application\n\n"
+        "[app.0]\nkind=apk\npath=app/stub.apk\n"
+    )
+    with_comp = (
+        "[nemesis]\nversion=1.0\nid=launch.comp\nname=Launch Component\n"
+        "types=application\n\n"
+        "[app.0]\nkind=apk\npath=app/stub.apk\n"
+        "component=com.dotgears.flappybird/com.dotgears.flappy.SplashScreen\n"
+        "package=com.dotgears.flappybird\n"
+    )
+    for name, meta in (("launch-apk.zip", apk_only), ("launch-comp.zip", with_comp)):
+        with zipfile.ZipFile(out / name, "w") as z:
+            z.writestr("NEMESIS.data", meta)
+            z.writestr("app/stub.apk", b"PK\x03\x04stub")
 
 
 def stage_cache() -> None:
@@ -69,6 +87,8 @@ def stage_cache() -> None:
         (ROOT / "out/zip-slip.zip", "zip-slip.zip"),
         (ROOT / "out/empty-meta.zip", "empty-meta.zip"),
         (ROOT / "out/garbage.bin", "garbage.bin"),
+        (ROOT / "out/launch-apk.zip", "launch-apk.zip"),
+        (ROOT / "out/launch-comp.zip", "launch-comp.zip"),
         (ROOT / "boot/install-recovery.sh", "install-recovery.sh"),
         (ROOT / "boot/qb_hook.sh", "qb_hook.sh"),
         (ROOT / "tests/qb_runtime.stock.sh", "qb_runtime.stock.sh"),
@@ -236,6 +256,8 @@ def install_cli(g: Guest, native: Path) -> None:
         "cp -f /cache/zip-slip.zip /data/local/tmp/",
         "cp -f /cache/empty-meta.zip /data/local/tmp/",
         "cp -f /cache/garbage.bin /data/local/tmp/",
+        "cp -f /cache/launch-apk.zip /data/local/tmp/",
+        "cp -f /cache/launch-comp.zip /data/local/tmp/",
         "cp -f /cache/NEMESIS.apk /system/app/NEMESIS.apk",
         "chmod 644 /system/app/NEMESIS.apk",
         "cp -f /cache/install-recovery.sh /system/etc/install-recovery.sh",
@@ -321,11 +343,14 @@ def session_log(g: Guest) -> str:
 
 
 def usb_wait_handled(g: Guest, prev: str, timeout: float = 15.0) -> str:
+    """Wait until a new 'handled type=' line is appended. A reread of the same
+    log must not count: guest cat output is not byte-stable."""
     deadline = time.time() + timeout
     last = prev
+    need = prev.count("handled type=") + 1
     while time.time() < deadline:
         last = session_log(g)
-        if last != prev and "handled type=" in last:
+        if last.count("handled type=") >= need:
             return last
         time.sleep(0.3)
     fail(
@@ -368,14 +393,164 @@ def wait_restarted(g: Guest, path: str, old: str, label: str, timeout: int = 20)
     return new
 
 
+def _write_stub(g: Guest, name: str) -> None:
+    g.cmd(f"mv /system/bin/{name} /data/nemesis/{name}.stock", timeout=15)
+    g.cmd(f"echo '#!/system/bin/sh' > /system/bin/{name}", timeout=10)
+    g.cmd(
+        f"echo 'echo {name}:$* >> /data/nemesis/launch.log' >> /system/bin/{name}",
+        timeout=10,
+    )
+    if name == "pm":
+        # KitKat pm prints Success/Failure and exits 0 either way. NEMESIS
+        # trusts the text, so the stub must say Success on install.
+        g.cmd(
+            "echo 'case \"$1\" in install) echo Success;; esac' >> /system/bin/pm",
+            timeout=10,
+        )
+    g.cmd(f"echo 'exit 0' >> /system/bin/{name}", timeout=10)
+    g.cmd(f"chmod 755 /system/bin/{name}", timeout=10)
+
+
+def _restore_stub(g: Guest, name: str) -> None:
+    g.cmd(f"rm -f /system/bin/{name}", timeout=10)
+    g.cmd(f"mv /data/nemesis/{name}.stock /system/bin/{name}", timeout=15)
+    g.cmd(f"chmod 755 /system/bin/{name}", timeout=10)
+
+
+def run_pkg_launch_apk_tests(g: Guest) -> None:
+    """kind=apk alone has nothing to launch. component= runs am start -n."""
+    print("== pkg-launch android app ==", flush=True)
+    g.cmd("/system/xbin/nemesis remount rw", timeout=20)
+    monkey = g.cmd("ls /system/bin/monkey >/dev/null 2>&1 && echo HAVE || echo MISS", timeout=10)
+    have_monkey = "HAVE" in monkey
+    _write_stub(g, "am")
+    _write_stub(g, "pm")
+    if have_monkey:
+        _write_stub(g, "monkey")
+    try:
+        g.cmd("rm -f /data/nemesis/launch.log", timeout=10)
+        out = g.cmd("/system/xbin/nemesis install launch-apk.zip", timeout=40)
+        print(out, flush=True)
+        expect(out, "ok installed launch.apk", "install apk-only package")
+        g.cmd("rm -f /data/nemesis/launch.log", timeout=10)
+        out = g.cmd("/system/xbin/nemesis pkg-launch launch.apk; echo LAUNCH_RC=$?", timeout=20)
+        print(out, flush=True)
+        expect(out, "package has nothing to launch: launch.apk", "apk without component does not launch")
+        expect(out, "LAUNCH_RC=1", "apk-only launch fails")
+        log = g.cmd("cat /data/nemesis/launch.log 2>/dev/null || echo NO_LAUNCH_LOG", timeout=10)
+        body = "\n".join(
+            ln for ln in log.splitlines()
+            if "com.nemesis.manager/.MainActivity" not in ln and ln.strip() != "NO_LAUNCH_LOG"
+        ).strip()
+        if body:
+            fail("apk-only launch called am", body)
+        print("OK: apk-only launch did not call am", flush=True)
+        g.cmd("/system/xbin/nemesis uninstall launch.apk", timeout=30)
+
+        g.cmd("rm -f /data/nemesis/launch.log", timeout=10)
+        out = g.cmd("/system/xbin/nemesis install launch-comp.zip", timeout=40)
+        print(out, flush=True)
+        expect(out, "ok installed launch.comp", "install component package")
+        g.cmd("rm -f /data/nemesis/launch.log", timeout=10)
+        out = g.cmd("/system/xbin/nemesis pkg-launch launch.comp; echo LAUNCH_RC=$?", timeout=20)
+        print(out, flush=True)
+        expect(out, "ok launched launch.comp", "component package launches")
+        expect(out, "LAUNCH_RC=0", "component launch succeeds")
+        log = g.cmd("cat /data/nemesis/launch.log", timeout=10)
+        print(log, flush=True)
+        expect(log, "am:start -n", "launch ran am start -n")
+        expect(
+            log,
+            "com.dotgears.flappybird/com.dotgears.flappy.SplashScreen",
+            "launch targeted the Flappy Bird activity",
+        )
+        expect_not(log, "monkey:", "component launch did not call monkey")
+        g.cmd("echo '#!/system/bin/sh' > /system/bin/am", timeout=10)
+        g.cmd("echo 'echo am:$* >> /data/nemesis/launch.log' >> /system/bin/am", timeout=10)
+        g.cmd("echo 'exit 1' >> /system/bin/am", timeout=10)
+        g.cmd("chmod 755 /system/bin/am", timeout=10)
+        g.cmd("rm -f /data/nemesis/launch.log", timeout=10)
+        out = g.cmd("/system/xbin/nemesis pkg-launch launch.comp; echo LAUNCH_RC=$?", timeout=20)
+        print(out, flush=True)
+        expect(out, "activity launch failed:", "failed am start is reported")
+        expect(out, "LAUNCH_RC=1", "failed am start does not count as launched")
+        if "ok launched" in out:
+            fail("failed am start still printed ok launched", out)
+        g.cmd("/system/xbin/nemesis uninstall launch.comp", timeout=30)
+        listed = g.cmd("/system/xbin/nemesis pkg-list", timeout=15)
+        if "launch.apk|" in listed or "launch.comp|" in listed:
+            fail("launch fixtures still installed", listed)
+        print("OK: launch fixtures removed", flush=True)
+
+        # HMG blocks new installs while sys.boot_completed=1. NEMESIS clears it
+        # for the pm call only and must put the previous value back. The lab
+        # normally has boot_completed unset; leave it that way for later tests.
+        orig_bc = g.cmd(
+            "getprop sys.boot_completed; echo BC_END",
+            timeout=10,
+        )
+        orig_bc = "\n".join(
+            ln.strip() for ln in orig_bc.splitlines()
+            if ln.strip() and ln.strip() != "BC_END"
+        ).strip()
+        g.cmd("setprop sys.boot_completed 1", timeout=10)
+        before = g.cmd("getprop sys.boot_completed", timeout=10)
+        expect(before, "1", "boot_completed set before apk install")
+        g.cmd("rm -f /data/nemesis/launch.log", timeout=10)
+        out = g.cmd("/system/xbin/nemesis install launch-comp.zip", timeout=40)
+        print(out, flush=True)
+        expect(out, "ok installed launch.comp", "install with boot_completed cleared briefly")
+        after = g.cmd("getprop sys.boot_completed", timeout=10)
+        expect(after, "1", "boot_completed restored after apk install")
+        nlog = g.cmd("grep cleared.sys.boot_completed /data/nemesis/nemesis.log", timeout=10)
+        print(nlog, flush=True)
+        expect(nlog, "cleared sys.boot_completed for install", "install cleared boot_completed")
+        g.cmd("/system/xbin/nemesis uninstall launch.comp", timeout=30)
+        if orig_bc:
+            g.cmd(f"setprop sys.boot_completed {orig_bc}", timeout=10)
+        else:
+            # Property cannot be deleted; empty string is the lab default.
+            g.cmd("setprop sys.boot_completed ''", timeout=10)
+        print("OK: boot_completed restored after apk install", flush=True)
+    finally:
+        _restore_stub(g, "am")
+        _restore_stub(g, "pm")
+        if have_monkey:
+            _restore_stub(g, "monkey")
+
+
 def run_cli_tests(g: Guest) -> None:
+    print("== stale watchdog pid must not block boot ==", flush=True)
+    g.cmd("mkdir -p /data/nemesis", timeout=10)
+    g.cmd("echo '1 999999999' > /data/nemesis/watchdog.pid", timeout=10)
+    out = g.cmd("/system/etc/install-recovery.sh; echo RECOVERY_RC=$?", timeout=40)
+    expect(out, "RECOVERY_RC=0", "install-recovery exits with a stale watchdog pid")
+    wd = ""
+    for _ in range(15):
+        time.sleep(1)
+        wd = pid_of(g, WD_PID)
+        if wd and wd != "1" and pid_alive_guest(g, wd):
+            break
+    if not wd or wd == "1" or not pid_alive_guest(g, wd):
+        fail(
+            "watchdog did not replace stale pid 1",
+            f"pid={wd}\n" + g.cmd(f"cat {NEMESIS_LOG} 2>/dev/null || true", timeout=10),
+        )
+    exe = g.cmd(f"ls -l /proc/{wd}/exe 2>/dev/null || true", timeout=10)
+    expect(exe, "nemesis", "replacement watchdog is /system/xbin/nemesis")
+    log = g.cmd(f"cat {NEMESIS_LOG} 2>/dev/null || true", timeout=10)
+    expect(log, "stale pidfile", "stale watchdog pidfile was logged")
+    out = g.cmd("/system/xbin/nemesis ping; echo PING_RC=$?", timeout=15)
+    expect(out, "PING_RC=0", "watchdog socket answers ping after stale start")
+    print(f"OK: watchdog replaced stale pid with {wd}", flush=True)
+
     print("starting watchdog via install-recovery (init oneshot path)...", flush=True)
     out = g.cmd("/system/etc/install-recovery.sh; echo RECOVERY_RC=$?", timeout=20)
     expect(out, "RECOVERY_RC=0", "install-recovery.sh exits 0")
     wd = ""
     for _ in range(12):
         time.sleep(1)
-        wd = pid_of(g, "/data/local/tmp/nemesis/watchdog.pid")
+        wd = pid_of(g, WD_PID)
         if pid_alive_guest(g, wd):
             break
     if not pid_alive_guest(g, wd):
@@ -440,7 +615,7 @@ def run_cli_tests(g: Guest) -> None:
     expect(out, "QB_RC=0", "qb_runtime.sh with hook exits")
     if time.time() - t0 > 15:
         fail("qb_runtime.sh hung after hook", out)
-    wd2 = pid_of(g, "/data/local/tmp/nemesis/watchdog.pid")
+    wd2 = pid_of(g, WD_PID)
     if not pid_alive_guest(g, wd2):
         fail("watchdog died during qb_runtime.sh")
     print("OK: qb hook did not kill watchdog", flush=True)
@@ -499,6 +674,8 @@ def run_cli_tests(g: Guest) -> None:
         fail("hello.tool still listed after uninstall", out)
     print("OK: hello.tool removed from pkg-list", flush=True)
 
+    run_pkg_launch_apk_tests(g)
+
     print("== locked usb-handler ==", flush=True)
     out = g.cmd("/system/xbin/nemesis uninstall usb-handler", timeout=20)
     expect(out, "package is locked", "uninstall usb-handler refused")
@@ -534,9 +711,17 @@ def run_corner_tests(g: Guest) -> None:
     expect(out, "id=hello.tool", "pkg-info hello.tool")
     out = g.cmd("/system/xbin/nemesis root -c 'echo ROOT_OK'", timeout=15)
     expect(out, "ROOT_OK", "nemesis root -c works")
+    out = g.cmd("/system/xbin/nemesis remount rw; echo REMOUNT_RC=$?", timeout=15)
+    expect(out, "REMOUNT_RC=0", "nemesis remount rw")
+    expect(out, "remount /system rw ok", "nemesis remount rw printed ok")
+    out = g.cmd("/system/xbin/nemesis root -c 'mount -o remount,rw /system'; echo MNT_RC=$?", timeout=15)
+    expect(out, "MNT_RC=0", "root mount remount /system")
+    if "Operation not permitted" in out:
+        fail("toolbox remount still EPERM via nemesis root", out)
+    print("OK: remount via CLI and intercepted mount", flush=True)
 
     print("== corner: second watchdog exits ==", flush=True)
-    wd = pid_of(g, "/data/local/tmp/nemesis/watchdog.pid")
+    wd = pid_of(g, WD_PID)
     if not wd:
         fail("watchdog pidfile missing before second start")
     t0 = time.time()
@@ -544,7 +729,7 @@ def run_corner_tests(g: Guest) -> None:
     expect(out, "WD2_RC=0", "second watchdog exits instead of taking over")
     if time.time() - t0 > 5:
         fail("second watchdog blocked in the main loop (took over)", out)
-    wd2 = pid_of(g, "/data/local/tmp/nemesis/watchdog.pid")
+    wd2 = pid_of(g, WD_PID)
     if wd2 and wd != wd2:
         fail(f"second watchdog replaced pid {wd} -> {wd2}")
     print("OK: second watchdog did not replace the running one", flush=True)
@@ -593,7 +778,22 @@ def run_usb_tests(g: Guest) -> None:
     expect(nlog, "cannot open Manager", "open does not block on am when Android is down")
     assert_qemu("after type=open")
 
-    print("== USB: changing data without eject does not re-handle ==", flush=True)
+    print("== USB: same descriptor is not handled twice ==", flush=True)
+    prev = session_log(g)
+    time.sleep(4)
+    log = session_log(g)
+    extra = log[len(prev) :] if log.startswith(prev) else log
+    if "handled type=" in extra:
+        fail("handler re-ran the same NEMESIS.data without a change", log)
+    print("OK: same insertion is not handled twice", flush=True)
+
+    print("== USB: replacing NEMESIS.data without eject re-handles ==", flush=True)
+    write_text(
+        g,
+        f"{USB_SIM}/NEMESIS.sh",
+        "#!/system/bin/sh\necho replace-ok > /data/nemesis/usb-replace.ok\nexit 0\n",
+    )
+    g.cmd(f"cp -f {USB_SIM}/NEMESIS.sh /storage/usb0/NEMESIS.sh 2>/dev/null || true", timeout=10)
     prev = session_log(g)
     write_text(
         g,
@@ -601,12 +801,11 @@ def run_usb_tests(g: Guest) -> None:
         "[nemesis]\ntype=execute\npath=NEMESIS.sh\nversion=1\n",
     )
     g.cmd(f"cp -f {USB_SIM}/NEMESIS.data /storage/usb0/NEMESIS.data 2>/dev/null || true", timeout=10)
-    time.sleep(4)
-    log = session_log(g)
-    extra = log[len(prev) :] if log.startswith(prev) else log
-    if "handled type=execute" in extra:
-        fail("handler re-ran without eject", log)
-    print("OK: same insertion is not handled twice", flush=True)
+    log = usb_wait_handled(g, prev)
+    expect(log, "handled type=execute", "replaced descriptor handled without eject")
+    out = g.cmd("cat /data/nemesis/usb-replace.ok 2>/dev/null || true", timeout=10)
+    expect(out, "replace-ok", "execute ran after in-place NEMESIS.data replace")
+    print("OK: descriptor change re-arms the handler", flush=True)
 
     print("== USB: eject + reinsert execute (android-down recovery) ==", flush=True)
     usb_eject(g)
@@ -738,20 +937,27 @@ def run_usb_tests(g: Guest) -> None:
     usb_eject(g)
     assert_guest(g, "after rapid USB cycles")
     assert_qemu("after rapid USB cycles")
-    uh = pid_of(g, "/data/local/tmp/nemesis/pids/usb-handler+usb-handler")
+    uh = pid_of(g, UH_PID)
     if uh:
         alive = g.cmd(f"kill -0 {uh} 2>/dev/null && echo UH_ALIVE || echo UH_DEAD", timeout=10)
         expect(alive, "UH_ALIVE", "usb-handler still alive after USB churn")
     print("OK: USB connect/disconnect suite done", flush=True)
 
     print("== usb-handler restart after USB tests ==", flush=True)
-    uh = pid_of(g, "/data/local/tmp/nemesis/pids/usb-handler+usb-handler")
+    uh = pid_of(g, UH_PID)
     if not uh:
-        fail("usb-handler pidfile missing", g.cmd("ls /data/local/tmp/nemesis/pids", timeout=10))
+        fail("usb-handler pidfile missing", g.cmd(f"ls {UH_PID} /data/nemesis/pids 2>/dev/null || true", timeout=10))
     g.cmd(f"kill -9 '{uh}' || true", timeout=10)
-    uh = wait_restarted(
-        g, "/data/local/tmp/nemesis/pids/usb-handler+usb-handler", uh, "usb-handler"
-    )
+    uh = wait_restarted(g, UH_PID, uh, "usb-handler")
+
+    print("== usb-handler survives many kills (locked, no restart limit) ==", flush=True)
+    for _ in range(6):
+        uh = pid_of(g, UH_PID)
+        if not uh:
+            fail("usb-handler pidfile missing during restart-limit test")
+        g.cmd(f"kill -9 '{uh}' || true", timeout=10)
+        uh = wait_restarted(g, UH_PID, uh, "usb-handler")
+    print("OK: usb-handler came back after 6 kills", flush=True)
 
     print("== USB execute still works after handler restart ==", flush=True)
     usb_eject(g)
@@ -775,16 +981,33 @@ def run_usb_tests(g: Guest) -> None:
     expect(out, "after-restart", "USB recovery script ran after handler restart")
     usb_eject(g)
 
+    print("== stale svcmgr pid must be replaced ==", flush=True)
+    sm = pid_of(g, SM_PID)
+    if not sm:
+        fail("svcmgr pidfile missing before stale-pid test")
+    g.cmd(
+        f"kill -9 '{sm}' 2>/dev/null; echo '1 999999999' > {SM_PID}; echo STALE_SM",
+        timeout=10,
+    )
+    sm = wait_restarted(g, SM_PID, "1", "svcmgr")
+    if sm == "1":
+        fail("svcmgr left the stale pid in place", sm)
+    uh = pid_of(g, UH_PID)
+    if uh:
+        alive = g.cmd(f"kill -0 {uh} 2>/dev/null && echo UH_ALIVE || echo UH_DEAD", timeout=10)
+        expect(alive, "UH_ALIVE", "usb-handler still alive after stale svcmgr pid")
+    print(f"OK: svcmgr replaced stale pid with {sm}", flush=True)
+
     print("== svcmgr restart; USB Handler must survive ==", flush=True)
-    sm = pid_of(g, "/data/local/tmp/nemesis/svcmgr.pid")
+    sm = pid_of(g, SM_PID)
     if not sm:
         fail("svcmgr pidfile missing")
-    uh = pid_of(g, "/data/local/tmp/nemesis/pids/usb-handler+usb-handler")
+    uh = pid_of(g, UH_PID)
     g.cmd(f"kill -9 '{sm}' || true", timeout=10)
-    wait_restarted(g, "/data/local/tmp/nemesis/svcmgr.pid", sm, "svcmgr")
+    wait_restarted(g, SM_PID, sm, "svcmgr")
     uh2 = ""
     for _ in range(20):
-        uh2 = pid_of(g, "/data/local/tmp/nemesis/pids/usb-handler+usb-handler")
+        uh2 = pid_of(g, UH_PID)
         if pid_alive_guest(g, uh2):
             break
         time.sleep(1)
@@ -793,20 +1016,20 @@ def run_usb_tests(g: Guest) -> None:
     print(f"OK: usb-handler alive after svcmgr restart (pid {uh2})", flush=True)
 
     print("== watchdog restart; stack must remain ==", flush=True)
-    wd = pid_of(g, "/data/local/tmp/nemesis/watchdog.pid")
-    sm = pid_of(g, "/data/local/tmp/nemesis/svcmgr.pid")
-    uh = pid_of(g, "/data/local/tmp/nemesis/pids/usb-handler+usb-handler")
+    wd = pid_of(g, WD_PID)
+    sm = pid_of(g, SM_PID)
+    uh = pid_of(g, UH_PID)
     if not wd:
         fail("watchdog pidfile missing")
     g.cmd(f"kill -9 '{wd}' || true", timeout=10)
-    wait_restarted(g, "/data/local/tmp/nemesis/watchdog.pid", wd, "watchdog")
-    sm2 = pid_of(g, "/data/local/tmp/nemesis/svcmgr.pid")
+    wait_restarted(g, WD_PID, wd, "watchdog")
+    sm2 = pid_of(g, SM_PID)
     if not pid_alive_guest(g, sm2):
-        sm2 = wait_restarted(g, "/data/local/tmp/nemesis/svcmgr.pid", sm or "0", "svcmgr")
+        sm2 = wait_restarted(g, SM_PID, sm or "0", "svcmgr")
     uh2 = uh if pid_alive_guest(g, uh) else ""
     if not uh2:
         for _ in range(20):
-            uh2 = pid_of(g, "/data/local/tmp/nemesis/pids/usb-handler+usb-handler")
+            uh2 = pid_of(g, UH_PID)
             if pid_alive_guest(g, uh2):
                 break
             time.sleep(1)

@@ -70,15 +70,20 @@ am broadcast -a {TOAST_ACTION} \\
 
 mount -o remount,rw /system 2>&1 || mount -o rw,remount / 2>&1
 
-if [ -f /data/local/tmp/nemesis/watchdog.pid ]; then
-    kill -TERM $(cat /data/local/tmp/nemesis/watchdog.pid) 2>/dev/null || true
-    sleep 1
-    kill -KILL $(cat /data/local/tmp/nemesis/watchdog.pid) 2>/dev/null || true
-fi
-if [ -f /data/local/tmp/nemesis/svcmgr.pid ]; then
-    kill -TERM $(cat /data/local/tmp/nemesis/svcmgr.pid) 2>/dev/null || true
-    kill -KILL $(cat /data/local/tmp/nemesis/svcmgr.pid) 2>/dev/null || true
-fi
+kill_pidfile() {{
+    _pf="$1"
+    if [ -f "$_pf" ]; then
+        kill -TERM $(cat "$_pf") 2>/dev/null || true
+        sleep 1
+        kill -KILL $(cat "$_pf") 2>/dev/null || true
+    fi
+}}
+kill_pidfile /data/nemesis/watchdog.pid
+kill_pidfile /data/nemesis/svcmgr.pid
+kill_pidfile /data/nemesis/pids/usb-handler+usb-handler
+kill_pidfile /data/local/tmp/nemesis/watchdog.pid
+kill_pidfile /data/local/tmp/nemesis/svcmgr.pid
+kill_pidfile /data/local/tmp/nemesis/pids/usb-handler+usb-handler
 
 extract_blob /system/xbin/nemesis "$ELF_SKIP" "$ELF_LEN"
 chown root:root /system/xbin/nemesis 2>/dev/null || true
@@ -103,13 +108,22 @@ fi
 
 sync
 
-rm -rf /storage/upgrade/*
-
 am broadcast -a {TOAST_ACTION} \\
   -e {TOAST_MSG_EXTRA} "NEMESIS installation completed successfully, restarting." \\
   --ez {TOAST_POPUP_EXTRA} true 2>&1 || true
 
 sync
+# The rest runs from /data. Deleting /storage/upgrade while this file is
+# still the shell script cuts it off, and the unit reboots before the toast.
+cat > /data/nemesis/ota-finish.sh << 'END'
+#!/system/bin/sh
+sleep 5
+rm -rf /storage/upgrade/*
+sync
+reboot
+END
+chmod 755 /data/nemesis/ota-finish.sh
+exec /data/nemesis/ota-finish.sh
 sleep 5
 reboot
 exit 0

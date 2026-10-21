@@ -43,6 +43,9 @@ public class LogActivity extends Activity {
             public void run() {
                 String dump = Cli.run("log", "dump");
                 if (dump == null || dump.trim().length() == 0) {
+                    dump = readFile(new File("/data/nemesis/nemesis.log"));
+                }
+                if (dump == null || dump.trim().length() == 0) {
                     dump = readFile(new File("/data/local/tmp/nemesis/nemesis.log"));
                 }
                 if (dump == null || dump.trim().length() == 0) dump = "(no log yet)";
@@ -60,9 +63,12 @@ public class LogActivity extends Activity {
     private boolean copyAll() {
         File dst = new File("/storage/usb0/NEMESIS-logs");
         boolean any = false;
+        copyTree(new File("/data/nemesis/logs"), dst);
         copyTree(new File("/data/local/tmp/nemesis/logs"), dst);
-        if (copyFile(new File("/data/local/tmp/nemesis/nemesis.log"),
+        if (copyFile(new File("/data/nemesis/nemesis.log"),
                 new File(dst, "nemesis.log"))) any = true;
+        if (copyFile(new File("/data/local/tmp/nemesis/nemesis.log"),
+                new File(dst, "nemesis.log.tmp"))) any = true;
         if (dst.isDirectory() && dst.list() != null && dst.list().length > 0) any = true;
         return any;
     }

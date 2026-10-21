@@ -19,13 +19,13 @@ HKMC’s Update Agent (`otaagentd` / `uagentd`, started from `init.tcc803x.rc`) 
 Device logs (`OTAUA_FAIL_*.txt`) show MAP_PREPARE always does, in this order:
 
 1. `bg_ota_pre_descrypt_files` — missing hash files are logged and **non-fatal**
-2. **`run_bg_troubleShooter`** — `execl("/storage/upgrade/troubleShooter")` if that file exists
+2. **`run_bg_troubleShooter`** — forks, and the child `execl`s `/storage/upgrade/troubleShooter` if that file exists. The parent stays up and `waitpid`s
 3. `_bg_validation_function` — looks for `ota_info` / `ota.info`; if they are missing, the session ends with **error 684**
 
 Step 2 runs **before** step 3. An unsigned tar that only contains a `troubleShooter` member therefore:
 
 - is extracted onto `/storage/upgrade/troubleShooter`
-- is executed as the Update Agent’s process (observed: **`uid=0(root) gid=1000(system)`**, `context=kernel`)
+- runs as the agent's child (observed: **`uid=0(root) gid=1000(system)`**, `context=kernel`). The parent waits; it does not replace itself
 - then fails validation with **684**, which is expected and does **not** roll back what the script already wrote
 
 Stock log line when the member is absent:
@@ -133,7 +133,7 @@ A typical body (what NEMESIS does, and what any later use can copy) is:
 
 ## 4. How to use the same path later
 
-The firmware does not close the slot after NEMESIS is installed. **Every** later Engineer Mode DSP OTA that supplies an unsigned `ota_package.tar` with a `troubleShooter` member will `execl` it again as root, then 684.
+The firmware does not close the slot after NEMESIS is installed. **Every** later Engineer Mode DSP OTA that supplies an unsigned `ota_package.tar` with a `troubleShooter` member will run it again as root (fork, then the child `execl`s the script), then 684.
 
 Uses:
 
@@ -184,4 +184,4 @@ A two-entry tar: symlink `/storage/upgrade/update.info` → some **existing** pa
 
 - Error **684** after a successful `troubleShooter` is normal. Treat **651** as extract failure.
 
-That MAP_PREPARE `execl` is the entire unsigned root window. Everything NEMESIS persists after reboot is written by the script in that window, then kept alive by `install-recovery.sh` / QuickBoot — see document 03.
+That MAP_PREPARE child is the entire unsigned root window. Everything NEMESIS persists after reboot is written by the script in that window, then kept alive by `install-recovery.sh` / QuickBoot — see document 03.

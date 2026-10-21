@@ -15,6 +15,16 @@
             android:layout_height="match_parent"
             android:text="@string/title"
             style="@style/title_bar_text" />
+        <TextView
+            android:id="@+id/title_bar_version"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_gravity="left|center_vertical"
+            android:gravity="center_vertical"
+            android:paddingLeft="16dp"
+            android:paddingRight="8dp"
+            android:textColor="#ffb6c1c8"
+            android:textSize="20sp" />
         <Button
             android:id="@+id/btn_close"
             android:text="@string/close"

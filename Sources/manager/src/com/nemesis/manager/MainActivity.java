@@ -14,7 +14,14 @@ public class MainActivity extends Activity {
     private static final int ACT_PKG = 1;
     private static final int ACT_SVC = 2;
     private static final int ACT_LOG = 3;
-    private static final int ACT_WIPE = 4;
+    private static final int ACT_OPTIONS = 4;
+    private static final int ACT_ENG = 5;
+    private static final int ACT_DEALER = 6;
+    private static final int ACT_WIPE = 7;
+    private static final String ENG_COMPONENT =
+            "com.hkmc.system.app.engineering/.EngineeringModeMainActivity";
+    private static final String DEALER_COMPONENT =
+            "com.hkmc.system.app.engineering/.DealerModeActivity";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -26,18 +33,6 @@ public class MainActivity extends Activity {
             }
             Ui.bindTitle(this, R.string.title);
 
-            ArrayList<TwoLineAdapter.Row> rows = new ArrayList<TwoLineAdapter.Row>();
-            rows.add(new TwoLineAdapter.Row(getString(R.string.run_usb),
-                    "Execute NEMESIS.sh on the USB drive", "usb", false));
-            rows.add(new TwoLineAdapter.Row(getString(R.string.packages),
-                    "Installed packages", "pkg", false));
-            rows.add(new TwoLineAdapter.Row(getString(R.string.services),
-                    "Registered services", "svc", false));
-            rows.add(new TwoLineAdapter.Row(getString(R.string.logs),
-                    "NEMESIS log and copy to USB", "log", false));
-            rows.add(new TwoLineAdapter.Row(getString(R.string.wipe),
-                    "Remove NEMESIS and all packages", "wipe", false));
-
             ListView lv = (ListView) findViewById(R.id.list);
             if (lv == null) {
                 Ui.fallbackShell(this, false, false, false);
@@ -45,7 +40,7 @@ public class MainActivity extends Activity {
                 lv = (ListView) findViewById(R.id.list);
             }
             if (lv == null) return;
-            lv.setAdapter(new TwoLineAdapter(this, rows));
+            lv.setAdapter(new TwoLineAdapter(this, menuRows(true)));
             lv.setOnItemClickListener(new AdapterView.OnItemClickListener() {
                 public void onItemClick(AdapterView<?> p, View v, int pos, long id) {
                     onMenu(pos);
@@ -57,13 +52,7 @@ public class MainActivity extends Activity {
                 Ui.bindTitle(this, R.string.title);
                 ListView lv = (ListView) findViewById(R.id.list);
                 if (lv == null) return;
-                ArrayList<TwoLineAdapter.Row> rows = new ArrayList<TwoLineAdapter.Row>();
-                rows.add(new TwoLineAdapter.Row(getString(R.string.run_usb), "", "usb", false));
-                rows.add(new TwoLineAdapter.Row(getString(R.string.packages), "", "pkg", false));
-                rows.add(new TwoLineAdapter.Row(getString(R.string.services), "", "svc", false));
-                rows.add(new TwoLineAdapter.Row(getString(R.string.logs), "", "log", false));
-                rows.add(new TwoLineAdapter.Row(getString(R.string.wipe), "", "wipe", false));
-                lv.setAdapter(new TwoLineAdapter(this, rows));
+                lv.setAdapter(new TwoLineAdapter(this, menuRows(false)));
                 lv.setOnItemClickListener(new AdapterView.OnItemClickListener() {
                     public void onItemClick(AdapterView<?> p, View v, int pos, long id) {
                         onMenu(pos);
@@ -103,10 +92,57 @@ public class MainActivity extends Activity {
             startActivity(new Intent(this, LogActivity.class));
             return;
         }
+        if (pos == ACT_OPTIONS) {
+            startActivity(new Intent(this, OptionsActivity.class));
+            return;
+        }
+        if (pos == ACT_ENG) {
+            openComponent(ENG_COMPONENT);
+            return;
+        }
+        if (pos == ACT_DEALER) {
+            openComponent(DEALER_COMPONENT);
+            return;
+        }
         if (pos == ACT_WIPE) {
             Intent i = new Intent(this, DialogActivity.class);
             i.putExtra("nemesis_mode", "wipe");
             startActivity(i);
         }
+    }
+
+    private ArrayList<TwoLineAdapter.Row> menuRows(boolean summary) {
+        ArrayList<TwoLineAdapter.Row> rows = new ArrayList<TwoLineAdapter.Row>();
+        rows.add(new TwoLineAdapter.Row(getString(R.string.run_usb),
+                summary ? "Execute NEMESIS.sh on the USB drive" : "", "usb", false));
+        rows.add(new TwoLineAdapter.Row(getString(R.string.packages),
+                summary ? "Installed packages" : "", "pkg", false));
+        rows.add(new TwoLineAdapter.Row(getString(R.string.services),
+                summary ? "Registered services" : "", "svc", false));
+        rows.add(new TwoLineAdapter.Row(getString(R.string.logs),
+                summary ? "NEMESIS log and copy to USB" : "", "log", false));
+        rows.add(new TwoLineAdapter.Row(getString(R.string.options),
+                summary ? getString(R.string.options_sum) : "", "options", false));
+        rows.add(new TwoLineAdapter.Row(getString(R.string.engineering),
+                summary ? "Engineering Mode" : "", "eng", false));
+        rows.add(new TwoLineAdapter.Row(getString(R.string.dealer),
+                summary ? "Dealer Mode" : "", "dealer", false));
+        rows.add(new TwoLineAdapter.Row(getString(R.string.wipe),
+                summary ? "Remove NEMESIS and all packages" : "", "wipe", false));
+        return rows;
+    }
+
+    private void openComponent(final String component) {
+        new Thread(new Runnable() {
+            public void run() {
+                final int rc = Cli.runRc("root", "-c", "am start -n " + component);
+                if (rc == 0) return;
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        Ui.toast(MainActivity.this, R.string.open_fail);
+                    }
+                });
+            }
+        }).start();
     }
 }
