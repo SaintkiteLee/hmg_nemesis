@@ -11,6 +11,19 @@ You bear complete responsibility for any procedure with your car and its' compon
 
 You may pledge a small amount to help cover research costs for Gen5W systems as well as NEMESIS development. It is completely optional and is considered as a gratitude for the done work. You may donate [here](https://xwtk.cloud/services/nemesis#donate).
 
+## **Quick Installation Guidance**
+
+For your car to be compatible with NEMESIS, it has to have OTA update support (not necessary to have OTA Update subscription). Some cars may still not be compatible even in that case, it can only be understood once you try to install.
+
+| Step | Guidance |
+| ---- | -------- |
+| 1 | Download [NEMESIS Installation Package](ota_package.tar) onto your computer. |
+| 2 | Prepare an exFAT or FAT32 formatted blank USB drive. |
+| 3 | Copy the downloaded tar file onto the USB, do not extract or repack the archive file. |
+| 4 | Insert into the car's HU USB port, messages such as "No Supported Files" are expected. |
+| 5 | Navigate to Engineering Mode (use web to search on how to do so), open USB Copy, select Update DSP |
+| 6 | Tap on Update OTA, if you see a loading animation come up on the status bar in the top right, everything is going as planned. Wait for installation to complete and the HU to restart. |
+
 ## **Documentation**
 
 Read about NEMESIS, what it is exploiting, what it features, and its use manual.
