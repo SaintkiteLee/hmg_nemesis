@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/title_bar"
+    android:layout_width="match_parent"
+    android:layout_height="60dp">
+    <FrameLayout
+        android:background="@drawable/co_bg_title_bar"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+        <TextView
+            android:id="@+id/title_bar_text"
+            android:gravity="center"
+            android:layout_gravity="center"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:text="@string/title"
+            style="@style/title_bar_text" />
+        <Button
+            android:id="@+id/btn_close"
+            android:text="@string/close"
+            android:textSize="26sp"
+            android:textColor="@color/title_btn_text"
+            android:background="@drawable/co_bt_title"
+            android:layout_gravity="right|center_vertical"
+            android:layout_width="wrap_content"
+            android:layout_height="60dp"
+            android:minWidth="120dp"
+            android:paddingLeft="18dp"
+            android:paddingRight="18dp"
+            android:layout_marginRight="8dp" />
+    </FrameLayout>
+</FrameLayout>

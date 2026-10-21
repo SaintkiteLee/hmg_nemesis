@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NEMESIS</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+    <string name="ok">OK</string>
+    <string name="close">Close</string>
+    <string name="run_usb">Run USB NEMESIS.sh</string>
+    <string name="packages">Packages</string>
+    <string name="services">Services</string>
+    <string name="logs">Logs</string>
+    <string name="wipe">Wipe NEMESIS</string>
+    <string name="launch">Launch</string>
+    <string name="uninstall">Uninstall</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+    <string name="status">Status</string>
+    <string name="copy_usb">Copy to USB</string>
+    <string name="loading">Loading…</string>
+    <string name="empty_list">No items.</string>
+    <string name="empty_packages">No packages installed.</string>
+    <string name="empty_services">No services registered.</string>
+    <string name="select_item">Select an item first.</string>
+    <string name="copied">Copied to USB.</string>
+    <string name="copy_fail">Copy failed.</string>
+    <string name="locked_tag">locked</string>
+    <string name="confirm_execute">A compatible package has been found on the connected USB drive, do you wish to execute it?</string>
+    <string name="confirm_install">A compatible installation package has been found on the connected USB drive, do you wish to install it?</string>
+    <string name="confirm_open">Open NEMESIS Manager?</string>
+    <string name="invalid">Invalid package descriptor on the connected USB drive.</string>
+    <string name="forbidden">This package cannot be updated or uninstalled except via Wipe NEMESIS.</string>
+    <string name="result_ok">Operation completed successfully.</string>
+    <string name="result_fail">Operation failed.</string>
+    <string name="wipe_q">This will remove NEMESIS and all packages. Continue?</string>
+    <string name="title">NEMESIS</string>
+</resources>

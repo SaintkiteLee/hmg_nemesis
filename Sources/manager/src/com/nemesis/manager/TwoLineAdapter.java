@@ -1,0 +1,75 @@
+package com.nemesis.manager;
+
+import android.content.Context;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.BaseAdapter;
+import android.widget.TextView;
+
+import java.util.ArrayList;
+
+final class TwoLineAdapter extends BaseAdapter {
+    static final class Row {
+        String title;
+        String summary;
+        String key;
+        boolean locked;
+
+        Row(String title, String summary, String key, boolean locked) {
+            this.title = title;
+            this.summary = summary;
+            this.key = key;
+            this.locked = locked;
+        }
+    }
+
+    private final LayoutInflater inf;
+    private final ArrayList<Row> rows;
+
+    TwoLineAdapter(Context ctx, ArrayList<Row> rows) {
+        this.inf = LayoutInflater.from(ctx);
+        this.rows = rows;
+    }
+
+    public int getCount() {
+        return rows.size();
+    }
+
+    public Object getItem(int pos) {
+        return rows.get(pos);
+    }
+
+    public long getItemId(int pos) {
+        return pos;
+    }
+
+    public View getView(int pos, View convert, ViewGroup parent) {
+        View v = convert;
+        if (v == null) {
+            try {
+                v = inf.inflate(R.layout.list_row, parent, false);
+            } catch (Throwable t) {
+                TextView tv = new TextView(parent.getContext());
+                tv.setTextColor(0xFFB6C1C8);
+                tv.setPadding(24, 16, 24, 16);
+                tv.setTextSize(26);
+                v = tv;
+            }
+        }
+        Row r = rows.get(pos);
+        TextView title = (TextView) v.findViewById(R.id.row_title);
+        if (title != null) title.setText(r.title);
+        else if (v instanceof TextView) ((TextView) v).setText(r.title);
+        TextView s = (TextView) v.findViewById(R.id.row_summary);
+        if (s != null) {
+            if (r.summary == null || r.summary.length() == 0) {
+                s.setVisibility(View.GONE);
+            } else {
+                s.setVisibility(View.VISIBLE);
+                s.setText(r.summary);
+            }
+        }
+        return v;
+    }
+}

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:background="@drawable/pop_bg_btnbg"
+    android:layout_width="388dp"
+    android:layout_height="wrap_content"
+    android:layout_gravity="center">
+    <TextView
+        android:id="@+id/alertTitle"
+        android:textSize="23sp"
+        android:textColor="#fffffefe"
+        android:gravity="left|center_vertical"
+        android:paddingLeft="17dp"
+        android:paddingRight="17dp"
+        android:layout_width="match_parent"
+        android:layout_height="51dp"
+        android:text="@string/title" />
+    <ImageView
+        android:layout_gravity="center_horizontal"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:src="@drawable/pop_icon_i" />
+    <TextView
+        android:id="@+id/message"
+        android:textSize="21sp"
+        android:textColor="#ffffffff"
+        android:gravity="center"
+        android:padding="20dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+    <LinearLayout
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_width="match_parent"
+        android:layout_height="60dp">
+        <Button
+            android:id="@+id/button1"
+            android:text="@string/yes"
+            android:textSize="21sp"
+            android:textColor="@color/title_btn_text"
+            android:background="@drawable/co_bt_title"
+            android:layout_width="wrap_content"
+            android:layout_height="60dp"
+            android:minWidth="120dp"
+            android:paddingLeft="18dp"
+            android:paddingRight="18dp"
+            android:layout_marginRight="8dp" />
+        <Button
+            android:id="@+id/button2"
+            android:text="@string/no"
+            android:textSize="21sp"
+            android:textColor="@color/title_btn_text"
+            android:background="@drawable/co_bt_title"
+            android:layout_width="wrap_content"
+            android:layout_height="60dp"
+            android:minWidth="120dp"
+            android:paddingLeft="18dp"
+            android:paddingRight="18dp" />
+    </LinearLayout>
+</LinearLayout>

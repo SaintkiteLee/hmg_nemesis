@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:background="@drawable/co_bg"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    <LinearLayout
+        android:orientation="vertical"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+        <include layout="@layout/title_bar" />
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+            <TextView
+                android:id="@+id/empty"
+                android:textSize="26sp"
+                android:textColor="#ff62797f"
+                android:gravity="center"
+                android:visibility="gone"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:text="@string/empty_list" />
+            <ListView
+                android:id="@+id/list"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:divider="@drawable/co_bg_list_line"
+                android:dividerHeight="1dp"
+                android:listSelector="@drawable/co_list_selector"
+                android:choiceMode="singleChoice"
+                android:cacheColorHint="#00000000"
+                android:paddingTop="6dp" />
+        </FrameLayout>
+        <LinearLayout
+            android:id="@+id/btn_bar"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:background="@drawable/co_bg_bottom"
+            android:layout_width="match_parent"
+            android:layout_height="60dp">
+            <Button
+                android:id="@+id/btn_a"
+                android:layout_width="wrap_content"
+                android:layout_height="60dp"
+                android:minWidth="120dp"
+                android:textSize="21sp"
+                android:textColor="@color/title_btn_text"
+                android:background="@drawable/co_bt_title"
+                android:paddingLeft="18dp"
+                android:paddingRight="18dp"
+                android:layout_marginRight="8dp" />
+            <Button
+                android:id="@+id/btn_b"
+                android:layout_width="wrap_content"
+                android:layout_height="60dp"
+                android:minWidth="120dp"
+                android:textSize="21sp"
+                android:textColor="@color/title_btn_text"
+                android:background="@drawable/co_bt_title"
+                android:paddingLeft="18dp"
+                android:paddingRight="18dp" />
+        </LinearLayout>
+    </LinearLayout>
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="6dp"
+        android:layout_marginTop="60dp"
+        android:src="@drawable/title_bar_below_shadow_image" />
+</FrameLayout>
