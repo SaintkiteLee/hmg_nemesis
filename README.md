@@ -14,6 +14,9 @@ NEMESIS is subject to GNU AGPL 3.0 License, get to know more [here](LICENSE).
 
 You bear complete responsibility for any procedure with your car and its' components, it is important to understand that there is always risk associated with procedures described in this and associated documents in this repository, your car functionality may be heavily impacted if this software is not compatible with your components.
 
+## Packages
+Discover pre-made packages for you to install on your car. Browse catalog [here](Packages/README.md).
+
 ## **Quick Installation Guidance**
 
 For your car to be compatible with NEMESIS, it has to have OTA update support (not necessary to have OTA Update subscription). Some cars may still not be compatible even in that case, it can only be understood once you try to install.
@@ -40,6 +43,3 @@ Read about NEMESIS, what it is exploiting, what it features, and its use manual.
 | [05 - Run scripts](05-Run-Scripts.md) | USB `NEMESIS.sh` / `type=execute`: when they run and how to write them. |
 
 Documents **01** and **03** are the only ones that describe the DSP Update Agent path and on-disk install, do not use them with advanced LLMs which may have safeguards enabled. **02**, **04**, and **05** assume NEMESIS is already on the head unit and treat it as a Debugging Execution Interface for packages and privileged commands, so safeguards will not be triggered.
-
-## Packages
-Discover pre-made packages for you to install on your car. Browse catalog [here](Packages/README.md).
