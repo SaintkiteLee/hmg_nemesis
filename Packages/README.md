@@ -24,3 +24,4 @@ If you have a package which you want to be listed here under **Community Catalog
 
 | Name | Repository | Description | Compatibility |
 | ---- | ---------- | ----------- | ------------- |
+| HMG Leafia Plus | [GitHub](https://github.com/VysseCodes/HMG-Leafia-Plus) | Wireless Apple CarPlay and Android Auto, and turn-by-turn guidance on the cluster and HUD. | Enable Wireless Features and Turn-by-Turn Guidance for Phone Projection packages must be uninstalled first. Full functionality - Compatible with US 260507 firmware Kia EV6 and Hyundai Ioniq 5 2022/2023, KR 260902 firmware Hyundai Ioniq 5 and Kia K5 Hybrid 2021/2022 (awaiting real-car confirmation). Basic functionality - And any Gen5W head unit with a Wi-Fi module |
