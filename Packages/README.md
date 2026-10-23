@@ -1,6 +1,6 @@
 # Pre-made Packages
 
-Download the `.zip` for one catalog entry and extract it onto the root of an exFAT or FAT32 drive. The archive is the USB stick: `NEMESIS.data` at the stick root and the install zip under `packages/`. Use one NEMESIS package on the drive at a time.
+Download the `.zip` for one catalog entry and extract it onto the root of an exFAT or FAT32 drive. Use one NEMESIS package on the drive at a time.
 
 The source for each package is under [`Sources/packages`](../Sources/packages). Rebuild an install zip with:
 
