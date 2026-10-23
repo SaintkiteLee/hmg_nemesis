@@ -9,7 +9,7 @@ You bear complete responsibility for any procedure with your car and its' compon
 
 ### **Support NEMESIS development and research**
 
-You may pledge a small amount to help cover research costs for Gen5W systems as well as NEMESIS development. It is completely optional and is considered as a gratitude for the done work. You may donate [here](https://xwtk.cloud/services/nemesis#donate).
+You may pledge a small amount to help cover research costs for Gen5W systems as well as NEMESIS development. It is completely optional and is considered as a gratitude for the done work. Sponsor on [GitHub](https://github.com/sponsors/xwtk), or donate [here](https://xwtk.cloud/services/nemesis#donate).
 
 ## **Quick Installation Guidance**
 
