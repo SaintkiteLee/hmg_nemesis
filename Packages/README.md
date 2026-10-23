@@ -1,12 +1,12 @@
 # Pre-made Packages
 
-The package trees are under [`Sources/packages`](../Sources/packages). This folder keeps the USB stick descriptor for each catalog entry. The zip named in `NEMESIS.data` is not stored here. Build it, then copy it to `packages/` on the stick next to `NEMESIS.data`.
+Each catalog folder is one USB stick: `NEMESIS.data` at the stick root and the install zip under `packages/`. The `.zip` next to that folder is the same stick. Unzip it onto the root of an exFAT or FAT32 drive, or copy the folder contents there. Use one NEMESIS package on the drive at a time.
+
+The source for each package is under [`Sources/packages`](../Sources/packages). Rebuild an install zip with:
 
 ```bash
 python3 Sources/tools/make_nemesis_package.py Sources/packages/wireless-projection -o wireless.projection.zip
 ```
-
-Use one NEMESIS package on the USB drive at a time. Copy `NEMESIS.data` to the stick root and the zip to the relative `path` inside that descriptor (`packages/<id>.zip`).
 
 ## Catalog
 
