@@ -1,18 +1,18 @@
 # NEMESIS
 Own your car, to its fullest.
 
-[![Sponsor](https://img.shields.io/badge/Sponsor-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/xwtk)
-[![Donate](https://img.shields.io/badge/Donate-3DDC84?style=for-the-badge)](https://xwtk.cloud/services/nemesis#donate)
+### **Support NEMESIS development and research**
+
+You may pledge a small amount to help cover research costs for Gen5W systems as well as NEMESIS development. It is completely optional and is considered as a gratitude for the done work.
+
+[![Sponsor via GitHub](https://img.shields.io/badge/Sponsor%20via%20GitHub-FAFAFA?style=for-the-badge&logo=githubsponsors&logoColor=black)](https://github.com/sponsors/xwtk)
+[![Donate via xwtk.Portal](https://img.shields.io/badge/Donate%20via%20xwtk.Portal-FAFAFA?style=for-the-badge)](https://xwtk.cloud/services/nemesis#donate)
 
 ## **Warning**
 
 NEMESIS is subject to GNU AGPL 3.0 License, get to know more [here](LICENSE).
 
 You bear complete responsibility for any procedure with your car and its' components, it is important to understand that there is always risk associated with procedures described in this and associated documents in this repository, your car functionality may be heavily impacted if this software is not compatible with your components.
-
-### **Support NEMESIS development and research**
-
-You may pledge a small amount to help cover research costs for Gen5W systems as well as NEMESIS development. It is completely optional and is considered as a gratitude for the done work. Sponsor on [GitHub](https://github.com/sponsors/xwtk), or donate [here](https://xwtk.cloud/services/nemesis#donate).
 
 ## **Quick Installation Guidance**
 
