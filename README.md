@@ -1,6 +1,9 @@
 # NEMESIS
 Own your car, to its fullest.
 
+[![Sponsor](https://img.shields.io/badge/Sponsor-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/xwtk)
+[![Donate](https://img.shields.io/badge/Donate-3DDC84?style=for-the-badge)](https://xwtk.cloud/services/nemesis#donate)
+
 ## **Warning**
 
 NEMESIS is subject to GNU AGPL 3.0 License, get to know more [here](LICENSE).
