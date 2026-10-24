@@ -16,9 +16,9 @@ If you have a package which you want to be listed here under **Community Catalog
 
 | Name | Source | Description | Compatibility |
 | ---- | ------ | ----------- | ------------- |
-| Turn-by-Turn Guidance for Phone Projection | [Sources/packages/projection-tbt](../Sources/packages/projection-tbt) | Cluster and HUD turn-by-turn guidance for Android Auto and Apple CarPlay | Kia EV6 firmware 260507 |
-| Enable ADB | [Sources/packages/adb-tcp](../Sources/packages/adb-tcp) | Clears the hide flag on ADB in Engineering Mode. After install, open Engineering Mode, Module Info, page 3, and tap a corner of the screen until the ADB menu appears | Universal. The package snapshots the live unit and reboots |
-| Enable Wireless Features | [Sources/packages/wireless-projection](../Sources/packages/wireless-projection) | Enables WiFi control and wireless phone projection. Apple CarPlay through this package is not verified | Head units with a WiFi module |
+| Turn-by-Turn Guidance for Phone Projection | [Sources/packages/projection-tbt](../Sources/packages/projection-tbt) | Cluster and HUD turn-by-turn guidance for Android Auto and Apple CarPlay | Kia EV6 with firmware 260507. |
+| Enable ADB | [Sources/packages/adb-tcp](../Sources/packages/adb-tcp) | Clears the hide flag on ADB in Engineering Mode. After install, open Engineering Mode, Module Info, page 3, and tap a corner of the screen until the ADB menu appears | All models. |
+| Enable Wireless Features | [Sources/packages/wireless-projection](../Sources/packages/wireless-projection) | Enables WiFi control and wireless phone projection. Apple CarPlay through this package is not verified | Head units with a WiFi module. |
 
 ## Community Catalog
 
