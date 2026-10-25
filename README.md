@@ -15,11 +15,16 @@ NEMESIS is subject to GNU AGPL 3.0 License, get to know more [here](LICENSE).
 You bear complete responsibility for any procedure with your car and its' components, it is important to understand that there is always risk associated with procedures described in this and associated documents in this repository, your car functionality may be heavily impacted if this software is not compatible with your components.
 
 ## Packages
+
 Discover pre-made packages for you to install on your car. Browse catalog [here](Packages/README.md).
 
 ## **Quick Installation Guidance**
 
-For your car to be compatible with NEMESIS, it has to have OTA update support (not necessary to have OTA Update subscription). Some cars may still not be compatible even in that case, it can only be understood once you try to install.
+For your car to be compatible with NEMESIS, it has to:
+
+1. Have an Android based Gen5W HU (version must have S5W_M in it in General Settings > SW Info). S5W_L is not supported, it is a fundamentally different hardware and software combination.
+
+2. It has to have OTA update support (not necessary to have OTA Update subscription) as NEMESIS utilizes a flaw in the OTA update logic as an entry point for its installation procedure. Some cars may still not be compatible even in that case, it can only be understood once you try to install.
 
 | Step | Guidance |
 | ---- | -------- |
@@ -28,7 +33,7 @@ For your car to be compatible with NEMESIS, it has to have OTA update support (n
 | 3 | Copy the downloaded tar file onto the USB, do not extract or repack the archive file. |
 | 4 | Insert into the car's HU USB port, messages such as "No Supported Files" are expected. |
 | 5 | Navigate to Engineering Mode (use web to search on how to do so), open USB Copy, select Update DSP |
-| 6 | Tap on Update OTA, if you see a loading animation come up on the status bar in the top right, everything is going as planned. Wait for installation to complete and the HU to restart. |
+| 6 | Tap on Update OTA (existence of this doesn't mean your car has OTA support), if you see a loading animation come up on the status bar in the top right, everything is going as planned. Wait for installation to complete and the HU to restart. |
 
 ## **Documentation**
 
