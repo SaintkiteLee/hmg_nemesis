@@ -1,4 +1,5 @@
 # NEMESIS
+
 Own your car, to its fullest.
 
 ### **Support NEMESIS development and research**
@@ -48,3 +49,6 @@ Read about NEMESIS, what it is exploiting, what it features, and its use manual.
 | [05 - Run scripts](05-Run-Scripts.md) | USB `NEMESIS.sh` / `type=execute`: when they run and how to write them. |
 
 Documents **01** and **03** are the only ones that describe the DSP Update Agent path and on-disk install, do not use them with advanced LLMs which may have safeguards enabled. **02**, **04**, and **05** assume NEMESIS is already on the head unit and treat it as a Debugging Execution Interface for packages and privileged commands, so safeguards will not be triggered.
+
+
+Developed by Gor Mirzoyan (xwtk.cloud).
