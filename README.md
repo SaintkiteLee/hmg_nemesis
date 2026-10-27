@@ -13,7 +13,7 @@ You may pledge a small amount to help cover research costs for Gen5W systems as 
 
 NEMESIS is subject to GNU AGPL 3.0 License, get to know more [here](LICENSE).
 
-You bear complete responsibility for any procedure with your car and its' components, it is important to understand that there is always risk associated with procedures described in this and associated documents in this repository, your car functionality may be heavily impacted if this software is not compatible with your components.
+You bear complete responsibility for any procedure with your car and its components, it is important to understand that there is always risk associated with procedures described in this and associated documents in this repository, your car functionality may be heavily impacted if this software is not compatible with your components.
 
 ## Packages
 
