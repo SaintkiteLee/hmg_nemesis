@@ -387,14 +387,23 @@ walk_featurexml() {
     return 0
 }
 
+# Some variants (nq5_us) ship CRLF in featurexml.cfg. Strip \r only for
+# matching; preserve the original bytes when writing the file.
+CR=$(print -r -- $'\r' 2>/dev/null)
+[ -n "$CR" ] || CR=$'\r'
 rewrite_featurexml() {
     local _fx="$1"
     local _tmp="$BACKUP_DIR/rewrite.tmp"
     local _line
+    local _match
     local _n=0
     : > "$_tmp" || return 1
     while IFS= read -r _line || [ -n "$_line" ]; do
-        case "$_line" in
+        _match="$_line"
+        case "$_match" in
+            *"$CR") _match="${_match%$CR}" ;;
+        esac
+        case "$_match" in
             \#*)
                 putline "$_line" >> "$_tmp" || return 1
                 ;;
