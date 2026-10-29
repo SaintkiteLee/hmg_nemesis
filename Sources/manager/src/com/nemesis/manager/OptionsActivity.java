@@ -10,7 +10,7 @@ import android.widget.ListView;
 import java.util.ArrayList;
 
 /** Options list, and the trigger-button picker opened from it. */
-public class OptionsActivity extends Activity {
+public class OptionsActivity extends HkmcActivity {
     private boolean picking;
 
     @Override

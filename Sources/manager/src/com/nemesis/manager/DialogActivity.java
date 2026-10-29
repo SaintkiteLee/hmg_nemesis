@@ -14,7 +14,7 @@ import android.widget.TextView;
 import java.io.File;
 import java.io.FileOutputStream;
 
-public class DialogActivity extends Activity {
+public class DialogActivity extends HkmcActivity {
     private String mode;
     private String sessionDir;
     private String targetId;

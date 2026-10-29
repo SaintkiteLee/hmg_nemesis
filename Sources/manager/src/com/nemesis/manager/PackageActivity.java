@@ -11,7 +11,7 @@ import android.widget.TextView;
 
 import java.util.ArrayList;
 
-public class PackageActivity extends Activity {
+public class PackageActivity extends HkmcActivity {
     private final ArrayList<TwoLineAdapter.Row> rows = new ArrayList<TwoLineAdapter.Row>();
     private TwoLineAdapter adapter;
     private int selected = -1;

@@ -6,6 +6,8 @@
     <uses-sdk android:minSdkVersion="19" android:targetSdkVersion="19" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Some HKMC KitKat builds check GET_TASKS when finishing an activity. -->
+    <uses-permission android:name="android.permission.GET_TASKS" />
     <application
         android:label="@string/app_name"
         android:icon="@drawable/ic_launcher"

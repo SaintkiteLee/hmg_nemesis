@@ -9,7 +9,7 @@ import android.widget.ListView;
 
 import java.util.ArrayList;
 
-public class MainActivity extends Activity {
+public class MainActivity extends HkmcActivity {
     private static final int ACT_USB = 0;
     private static final int ACT_PKG = 1;
     private static final int ACT_SVC = 2;
