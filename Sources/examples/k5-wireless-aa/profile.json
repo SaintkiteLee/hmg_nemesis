@@ -1,0 +1,10 @@
+{
+  "firmware": "DL3.KOR.S5W_M.V039.001.260902",
+  "description": "Kia K5 DL3 Korean-market standard Gen5W; software fingerprints shared by the firmware, not per-vehicle identifiers",
+  "md5": {
+    "framework.odex": "eab5af504694910d946f9067310b744a",
+    "services.odex": "6ce1dd85f9c873dfa037f75b72807cc4",
+    "PhoneProjection.odex": "c19f5f1b49b207a1df7142aaa572877c",
+    "HKMC_GPM.odex": "def8588772f648a6acedbed8ecdcd5d8"
+  }
+}

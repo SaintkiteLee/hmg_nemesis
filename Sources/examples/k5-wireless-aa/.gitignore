@@ -1,0 +1,16 @@
+build/
+dist/
+.private/
+__pycache__/
+*.pyc
+local.properties
+*.keystore
+*.jks
+*.pem
+*.key
+K5-AA-FIX/
+backups/
+analysis/
+*.log
+original-ap.parcel
+original.properties

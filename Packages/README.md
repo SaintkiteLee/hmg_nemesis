@@ -29,3 +29,9 @@ If you have a package which you want to be listed here under **Community Catalog
 | LaunchPad | [GitHub](https://github.com/paytondevs/gen5w-preconditioning) | A car launcher dashboard with manual battery preconditioning feature. | All Gen5W models for the launcher, Manual preconditioning supported only on US Hyundai Ioniq 5 and Kia EV6. |
 | Rear Dashcam | [GitHub](https://github.com/KramerTech/gen5-RearDashcam) | Turns your rear view camera into a dashcam. | Compatible only with cars with RVM. Tested on 260507 firmware US Hyundai Ioniq 5. |
 | Phone Button Router | Routes short and long steering-wheel voice-button presses to the connected phone's assistant through the factory long-press path. | Compatible only with 260507 firmware US Ioniq 5. |
+
+## Experimental vehicle-specific trials
+
+| Name | Source | Scope | Validation limits |
+| ---- | ------ | ----- | ----------------- |
+| [K5 wireless Android Auto trial](K5%20Wireless%20Android%20Auto%20Trial.zip) | [Source and tests](../Sources/examples/k5-wireless-aa) | Reversible AP/AA credential alignment and settings-route compatibility for K5 DL3 KR Gen5W `DL3.KOR.S5W_M.V039.001.260902`. Requires NEMESIS and enabled wireless projection features. | Actual wireless AA and keep confirmed; first reconnect after infotainment reboot may need a phone Bluetooth toggle. Post-USB guard cleanup still needs independent confirmation. |
