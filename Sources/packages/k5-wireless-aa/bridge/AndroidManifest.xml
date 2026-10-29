@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.daudio.app.deviceconnections" android:versionCode="9" android:versionName="k5-aa-compat-0.5.0">
+    <uses-sdk android:minSdkVersion="19" android:targetSdkVersion="19" />
+    <uses-permission android:name="android.permission.GET_TASKS" />
+    <application android:label="K5 AA 연결 호환" android:allowBackup="false" android:theme="@android:style/Theme.Holo.NoActionBar">
+        <activity android:name=".ui.connectivitySettings.PhoneProjectionSettingsActivity" android:exported="true" android:launchMode="singleTop" />
+    </application>
+</manifest>

@@ -1,0 +1,26 @@
+#!/system/bin/sh
+export PATH=/sbin:/vendor/bin:/system/sbin:/system/bin:/system/xbin
+case "$0" in /*) K5AA_USB_ROOT=${0%/*} ;; *) K5AA_USB_ROOT=$(pwd) ;; esac
+export K5AA_USB_ROOT
+STATE=/data/nemesis/k5-wireless-aa
+[ "$(id -u)" = 0 ] || exit 1
+MD5=$(command -v md5 2>/dev/null)
+[ -n "$MD5" ] || MD5=$(command -v md5sum 2>/dev/null)
+[ -n "$MD5" ] || exit 1
+set -- $("$MD5" "$K5AA_USB_ROOT/packages/k5.wireless.aa.zip" 2>/dev/null)
+[ "$1" = '@PACKAGE_MD5@' ] || exit 1
+/system/xbin/nemesis install "$K5AA_USB_ROOT/packages/k5.wireless.aa.zip" || exit 1
+count=0
+while [ "$count" -lt 120 ]; do
+    case "$(cat "$STATE/phase" 2>/dev/null)" in
+        waiting_usb|installed)
+            echo 'AP prepared. Remove USB, wait 15 seconds, then connect Android Auto.'
+            mv "$K5AA_USB_ROOT/NEMESIS.data" "$K5AA_USB_ROOT/NEMESIS.data.used" || exit 1
+            sync; exit 0 ;;
+        restoring|rolled_back) echo 'Setup failed; inspect package status before retrying.'; exit 1 ;;
+    esac
+    sleep 1; count=$((count+1))
+done
+echo rollback > "$STATE/decision"
+echo 'Setup timed out; recovery requested.'
+exit 1
