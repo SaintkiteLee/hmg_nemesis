@@ -4,6 +4,12 @@ This NEMESIS package aligns the actual AP SSID and credentials with the Connecti
 
 The AP credential verification, root settings-provider access, private Parcelable backup, settings bridge and idle-only AA reset come from the vehicle-successful 0.4.4 implementation. Version **0.5.0 separates normal installation from diagnostics**. Its new installation lifecycle has host validation; it has not yet been run on the vehicle. Reliable first automatic reconnect after an infotainment reboot remains unresolved; toggling phone Bluetooth restored AA in the earlier vehicle test.
 
+## Wi-Fi and AP implementation guide
+
+For the complete call sequence, read [Wi-Fi startup and AA access point activation](docs/wifi-ap.md). It explains hardware versus feature flags, Connectivity AP mode, the two SSID/credential field pairs, hostapd verification, USB-removal recovery, lifecycle states, and exact restoration checks. The [connection troubleshooting section](docs/wifi-ap.md#connection-troubleshooting) distinguishes AP readiness, phone association, DHCP, AA transport, and automatic reconnection.
+
+**CarPlay is outside this package's implementation.** Wireless CarPlay was reported not to connect on the reference K5; wired CarPlay failure is suspected but not yet confirmed. AA success does not establish CarPlay support or prove that this package caused a CarPlay regression. See [CarPlay boundaries](docs/wifi-ap.md#carplay-boundaries) before treating an AP or GPM adjustment as a CarPlay fix.
+
 ## Normal installation
 
 Build or download the normal USB ZIP and follow [USB_README.txt](USB_README.txt). The wrapper verifies the payload, installs a standard NEMESIS package, and waits for AP readiness. Remove the USB after Operation success, wait 15 seconds, then connect from the phone. An idle AA service is reset only after that same USB has been absent for two seconds. Connected/starting and unknown AA states are protected.
